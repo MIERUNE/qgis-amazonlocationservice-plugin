@@ -31,7 +31,7 @@ This plugin uses the functionality of Amazon Location Service v2 in QGIS.
 1. Select "Plugins" → "Manage and Install Plugins..."
 2. Search for "Amazon Location Service"
 
-Plugins can also be installed by loading a [zip file](https://github.com/dayjournal/qgis-amazonlocationservice-plugin/releases).
+Plugins can also be installed by loading a [zip file](https://github.com/MIERUNE/qgis-amazonlocationservice-plugin/releases).
 
 ### Menu
 
@@ -111,4 +111,4 @@ b. Layer routes from HERE on top of a map from another third-party provider, or 
 
 Python modules are released under the GNU General Public License v2.0
 
-Copyright (c) 2024-2025 Yasunori Kirimoto
+Copyright (c) 2024-2026 MIERUNE Inc.
