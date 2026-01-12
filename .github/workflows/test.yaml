@@ -1,0 +1,43 @@
+name: Test plugin
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+env:
+  DOCKER_IMAGE: qgis/qgis
+
+jobs:
+  test-plugin:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        docker_tags: [release-3_34]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Export requirements.txt
+        run: |
+          pip3 install uv
+          uv export -o requirements.txt --no-dev --no-hashes
+
+      - name: Docker pull and create qgis-testing-environment
+        run: |
+          docker pull "$DOCKER_IMAGE":${{ matrix.docker_tags }}
+          docker run -d --name qgis-testing-environment -v .:/tests_directory/location_service -e DISPLAY=:99 "$DOCKER_IMAGE":${{ matrix.docker_tags }}
+
+      - name: Docker set up QGIS
+        run: |
+          docker exec qgis-testing-environment sh -c "qgis_setup.sh location_service"
+          docker exec qgis-testing-environment sh -c "rm -f /root/.local/share/QGIS/QGIS3/profiles/default/python/plugins/location_service"
+          docker exec qgis-testing-environment sh -c "ln -s /tests_directory/location_service /root/.local/share/QGIS/QGIS3/profiles/default/python/plugins/location_service"
+          docker exec qgis-testing-environment sh -c "pip3 install -r /tests_directory/location_service/requirements.txt"
+
+      - name: Docker run plugin tests
+        run: |
+          docker exec qgis-testing-environment sh -c "qgis_testrunner.sh location_service.test_suite.test_package"

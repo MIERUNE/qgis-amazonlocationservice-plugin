@@ -107,6 +107,47 @@ When using HERE as a provider, in addition to the basic terms and conditions, yo
 a. Store or cache any Location Data for Japan, including any geocoding or reverse-geocoding results.  
 b. Layer routes from HERE on top of a map from another third-party provider, or layer routes from another third-party provider on top of maps from HERE.  
 
+## Development
+
+### Requirements
+
+- [uv](https://docs.astral.sh/uv/)
+- QGIS 3.x
+
+### Setup
+
+```bash
+# Install dependencies
+uv sync
+
+# Lint
+uv run ruff check .
+
+# Format
+uv run ruff format .
+```
+
+### Local Development
+
+Create a symbolic link to the QGIS plugins directory:
+
+**macOS:**
+```bash
+ln -s /path/to/location_service ~/Library/Application\ Support/QGIS/QGIS3/profiles/default/python/plugins/location_service
+```
+
+**Windows:**
+```powershell
+mklink /D "%APPDATA%\QGIS\QGIS3\profiles\default\python\plugins\location_service" "C:\path\to\location_service"
+```
+
+**Linux:**
+```bash
+ln -s /path/to/location_service ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/location_service
+```
+
+After editing the code, reload the plugin in QGIS to see the changes.
+
 ## License
 
 Python modules are released under the GNU General Public License v2.0
