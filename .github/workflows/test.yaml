@@ -35,7 +35,7 @@ jobs:
         run: |
           docker exec qgis-testing-environment sh -c "qgis_setup.sh location_service"
           docker exec qgis-testing-environment sh -c "rm -f /root/.local/share/QGIS/QGIS3/profiles/default/python/plugins/location_service"
-          docker exec qgis-testing-environment sh -c "ln -s /tests_directory/location_service /root/.local/share/QGIS/QGIS3/profiles/default/python/plugins/location_service"
+          docker exec qgis-testing-environment sh -c "ln -s /tests_directory/location_service/location_service /root/.local/share/QGIS/QGIS3/profiles/default/python/plugins/location_service"
           docker exec qgis-testing-environment sh -c "pip3 install -r /tests_directory/location_service/requirements.txt"
 
       - name: Docker run plugin tests
