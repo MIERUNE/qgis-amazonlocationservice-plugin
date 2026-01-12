@@ -1,4 +1,4 @@
-from typing import Any, Dict, Tuple
+from typing import Any
 
 from PyQt5.QtCore import QVariant
 from PyQt5.QtGui import QColor
@@ -50,7 +50,7 @@ class PlacesFunctions:
         self.configuration_handler = ConfigurationHandler()
         self.api_handler = ExternalApiHandler()
 
-    def get_configuration_settings(self) -> Tuple[str, str]:
+    def get_configuration_settings(self) -> tuple[str, str]:
         """
         Fetches necessary configuration settings from the settings manager.
 
@@ -62,7 +62,7 @@ class PlacesFunctions:
         apikey = self.configuration_handler.get_setting(self.KEY_APIKEY)
         return region, apikey
 
-    def search_text(self, text: str, lon: float, lat: float) -> Dict[str, Any]:
+    def search_text(self, text: str, lon: float, lat: float) -> dict[str, Any]:
         """
         Searches for a places index based on the provided longitude and
         latitude coordinates.
@@ -89,7 +89,7 @@ class PlacesFunctions:
             raise Exception("Failed to receive a valid response from the API.")
         return result
 
-    def add_point_layer(self, data: Dict) -> None:
+    def add_point_layer(self, data: dict) -> None:
         """
         Adds a new point layer to the current QGIS project based on search results.
 
@@ -102,7 +102,7 @@ class PlacesFunctions:
         )
         self.setup_layer(layer, data)
 
-    def setup_layer(self, layer: QgsVectorLayer, data: Dict) -> None:
+    def setup_layer(self, layer: QgsVectorLayer, data: dict) -> None:
         """
         Configures the given layer with attributes, features,
         styling, and labeling based on search results.
@@ -133,7 +133,7 @@ class PlacesFunctions:
         layer.dataProvider().addAttributes(fields)
         layer.updateFields()
 
-    def add_features(self, layer: QgsVectorLayer, data: Dict) -> None:
+    def add_features(self, layer: QgsVectorLayer, data: dict) -> None:
         """
         Adds features to the given layer based on search results.
 

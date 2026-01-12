@@ -1,4 +1,4 @@
-from typing import Any, Dict, Tuple
+from typing import Any
 
 from PyQt5.QtCore import QVariant
 from PyQt5.QtGui import QColor
@@ -39,7 +39,7 @@ class RoutesFunctions:
         self.configuration_handler = ConfigurationHandler()
         self.api_handler = ExternalApiHandler()
 
-    def get_configuration_settings(self) -> Tuple[str, str]:
+    def get_configuration_settings(self) -> tuple[str, str]:
         """
         Fetches necessary configuration settings from the settings manager.
 
@@ -53,7 +53,7 @@ class RoutesFunctions:
 
     def calculate_routes(
         self, st_lon: float, st_lat: float, ed_lon: float, ed_lat: float
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Calculates a route from start to end coordinates using an external API.
 
@@ -78,7 +78,7 @@ class RoutesFunctions:
             raise ValueError("Failed to receive a valid response from the API.")
         return result
 
-    def add_line_layer(self, data: Dict[str, Any]) -> None:
+    def add_line_layer(self, data: dict[str, Any]) -> None:
         """
         Adds a line layer to the QGIS project based on route data provided.
 
@@ -90,7 +90,7 @@ class RoutesFunctions:
         )
         self.setup_layer(layer, data)
 
-    def setup_layer(self, layer: QgsVectorLayer, data: Dict[str, Any]) -> None:
+    def setup_layer(self, layer: QgsVectorLayer, data: dict[str, Any]) -> None:
         """
         Configures the given layer with attributes, features,
         and styling based on route data.
@@ -117,7 +117,7 @@ class RoutesFunctions:
         layer.dataProvider().addAttributes(fields)
         layer.updateFields()
 
-    def add_features(self, layer: QgsVectorLayer, data: Dict) -> None:
+    def add_features(self, layer: QgsVectorLayer, data: dict) -> None:
         """
         Adds features to the layer based on the route data.
 

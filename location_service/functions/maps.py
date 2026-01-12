@@ -1,5 +1,3 @@
-from typing import Tuple
-
 from qgis.core import QgsProject, QgsRasterLayer
 
 from ..utils.configuration_handler import ConfigurationHandler
@@ -20,7 +18,7 @@ class MapsFunctions:
         """
         self.configuration_handler = ConfigurationHandler()
 
-    def get_configuration_settings(self) -> Tuple[str, str]:
+    def get_configuration_settings(self) -> tuple[str, str]:
         """
         Fetches necessary configuration settings from the settings manager.
 
