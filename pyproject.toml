@@ -2,7 +2,7 @@
 name = "Amazon Location Service"
 version = "1.0.0"
 description = "This plugin uses the functionality of Amazon Location Service in QGIS."
-authors = ["Yasunori Kirimoto <info@dayjournal.dev>"]
+authors = ["MIERUNE Inc. <info@mierune.co.jp>"]
 readme = "README.md"
 packages = [{ include = "location_service" }]
 

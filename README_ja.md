@@ -31,7 +31,7 @@ QGISでAmazon Location Service v2の機能を利用するプラグインです�
 1. 「プラグイン」→「プラグインを管理およびインストール」を選択
 2. 「Amazon Location Service」で検索
 
-プラグインは[zipファイル](https://github.com/dayjournal/qgis-amazonlocationservice-plugin/releases)を読み込みでもインストール可能
+プラグインは[zipファイル](https://github.com/MIERUNE/qgis-amazonlocationservice-plugin/releases)を読み込みでもインストール可能
 
 ### メニュー
 
@@ -111,4 +111,4 @@ b. 別の第三者プロバイダからのマップの上にHEREのルートを�
 
 Python modules are released under the GNU General Public License v2.0
 
-Copyright (c) 2024-2025 Yasunori Kirimoto
+Copyright (c) 2024-2026 MIERUNE Inc.

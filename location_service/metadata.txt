@@ -8,10 +8,10 @@ version=2.0
 #Plugin main icon
 icon=ui/icon.png
 
-author=Yasunori Kirimoto
-email=info@dayjournal.dev
-homepage=https://github.com/dayjournal/qgis-amazonlocationservice-plugin
-tracker=https://github.com/dayjournal/qgis-amazonlocationservice-plugin/issues
-repository=https://github.com/dayjournal/qgis-amazonlocationservice-plugin
+author=MIERUNE Inc.
+email=info@mierune.co.jp
+homepage=https://github.com/MIERUNE/qgis-amazonlocationservice-plugin
+tracker=https://github.com/MIERUNE/qgis-amazonlocationservice-plugin/issues
+repository=https://github.com/MIERUNE/qgis-amazonlocationservice-plugin
 tags=aws,amazonlocationservice,map,geocoding,routing
 category=
