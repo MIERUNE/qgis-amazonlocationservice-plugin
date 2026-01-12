@@ -3,7 +3,8 @@ name=Amazon Location Service
 description=QGIS Plugin for Amazon Location Service
 about=This plugin uses the functionality of Amazon Location Service in QGIS.
 qgisMinimumVersion=3.0
-version=2.0
+qgisMaximumVersion=3.99
+version=2.0.1
 
 #Plugin main icon
 icon=ui/icon.png
@@ -14,4 +15,4 @@ homepage=https://github.com/MIERUNE/qgis-amazonlocationservice-plugin
 tracker=https://github.com/MIERUNE/qgis-amazonlocationservice-plugin/issues
 repository=https://github.com/MIERUNE/qgis-amazonlocationservice-plugin
 tags=aws,amazonlocationservice,map,geocoding,routing
-category=
+category=Web

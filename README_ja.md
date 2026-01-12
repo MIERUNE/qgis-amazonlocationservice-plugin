@@ -107,6 +107,47 @@ HEREをプロバイダとして使用する場合、基本的な利用規約に�
 a. ジオコード化および逆ジオコード化の結果を含む日本のロケーションデータを保管またはキャッシュすること。  
 b. 別の第三者プロバイダからのマップの上にHEREのルートを重ねること、またはHEREのマップ上に他の第三者プロバイダからのルートを重ねること。  
 
+## 開発
+
+### 必要なツール
+
+- [uv](https://docs.astral.sh/uv/)
+- QGIS 3.x
+
+### セットアップ
+
+```bash
+# 依存関係のインストール
+uv sync
+
+# リント
+uv run ruff check .
+
+# フォーマット
+uv run ruff format .
+```
+
+### ローカル開発
+
+QGISのプラグインディレクトリにシンボリックリンクを作成します：
+
+**macOS:**
+```bash
+ln -s /path/to/location_service ~/Library/Application\ Support/QGIS/QGIS3/profiles/default/python/plugins/location_service
+```
+
+**Windows:**
+```powershell
+mklink /D "%APPDATA%\QGIS\QGIS3\profiles\default\python\plugins\location_service" "C:\path\to\location_service"
+```
+
+**Linux:**
+```bash
+ln -s /path/to/location_service ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/location_service
+```
+
+コードを編集した後、QGISでプラグインをリロードすると変更が反映されます。
+
 ## ライセンス
 
 Python modules are released under the GNU General Public License v2.0

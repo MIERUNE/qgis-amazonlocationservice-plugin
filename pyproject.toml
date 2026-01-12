@@ -1,31 +1,22 @@
-[tool.poetry]
-name = "Amazon Location Service"
-version = "1.0.0"
-description = "This plugin uses the functionality of Amazon Location Service in QGIS."
-authors = ["MIERUNE Inc. <info@mierune.co.jp>"]
+[project]
+name = "qgis-amazonlocationservice-plugin"
+version = "2.0.1"
+description = "QGIS Plugin for Amazon Location Service"
 readme = "README.md"
-packages = [{ include = "location_service" }]
+requires-python = ">=3.9"
+authors = [
+    { name = "MIERUNE Inc.", email = "info@mierune.co.jp" }
+]
+dependencies = []
 
-[tool.poetry.dependencies]
-python = "^3.9"
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.4.2"
-pytest-cov = "^7.0.0"
-pyqt5-stubs = { version = "^5.15.0", platform = "win32" }
-ruff = "^0.14.10"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
-[tool.pytest.ini_options]
-pythonpath = "."
-addopts = ["--import-mode=importlib"]
-# filterwarnings = "ignore::DeprecationWarning"
+[dependency-groups]
+dev = [
+    "pyqt5-stubs>=5.15.6.0",
+    "ruff>=0.14.0",
+]
 
 [tool.ruff]
-target-version = "py38"
+target-version = "py39"
 
 [tool.ruff.lint]
 select = [
@@ -46,6 +37,3 @@ select = [
     "RUF",
 ]
 ignore = ["N802", "E501", "RUF001"]
-
-[tool.coverage.run]
-source = ['location_service']

@@ -1,4 +1,4 @@
-from typing import Any, ClassVar, Dict
+from typing import Any, ClassVar
 
 from PyQt5.QtCore import QSettings
 
@@ -10,9 +10,9 @@ class ConfigurationHandler:
     """
 
     _instance: ClassVar[None] = None
-    _settings: ClassVar[Dict[str, Any]] = {}
+    _settings: ClassVar[dict[str, Any]] = {}
     SETTING_GROUP: ClassVar[str] = "/location-service"
-    DEFAULT_SETTINGS: ClassVar[Dict[str, str]] = {
+    DEFAULT_SETTINGS: ClassVar[dict[str, str]] = {
         "region_value": "",
         "apikey_value": "",
     }
@@ -70,7 +70,7 @@ class ConfigurationHandler:
         """
         return self._settings.get(key, None)
 
-    def get_settings(self) -> Dict[str, Any]:
+    def get_settings(self) -> dict[str, Any]:
         """
         Retrieves all settings as a dictionary.
 

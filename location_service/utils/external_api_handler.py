@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import json
-from typing import Any, Dict, Optional
+from typing import Any
 
 from PyQt5.QtCore import QEventLoop, QUrl
 from PyQt5.QtNetwork import QNetworkReply, QNetworkRequest
@@ -21,8 +23,8 @@ class ExternalApiHandler:
         self.network_manager = QgsNetworkAccessManager.instance()
 
     def send_json_post_request(
-        self, url: str, data: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
+        self, url: str, data: dict[str, Any]
+    ) -> dict[str, Any] | None:
         """
         Sends a POST request to the specified URL with the provided data and
         handles the network response.
@@ -44,7 +46,7 @@ class ExternalApiHandler:
         event_loop.exec_()
         return self.handle_network_reply(reply)
 
-    def handle_network_reply(self, reply: QNetworkReply) -> Optional[Dict[str, Any]]:
+    def handle_network_reply(self, reply: QNetworkReply) -> dict[str, Any] | None:
         """
         Processes the network reply, checking for errors and decoding the JSON response.
 
