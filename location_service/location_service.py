@@ -1,9 +1,9 @@
 import os
 from typing import Callable, Optional
 
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QAction, QWidget
+from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtGui import QIcon
+from qgis.PyQt.QtWidgets import QAction, QWidget
 
 from .ui.config.config import ConfigUi
 from .ui.maps.maps import MapsUi

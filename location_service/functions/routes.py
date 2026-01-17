@@ -1,7 +1,5 @@
 from typing import Any
 
-from PyQt5.QtCore import QVariant
-from PyQt5.QtGui import QColor
 from qgis.core import (
     QgsFeature,
     QgsField,
@@ -14,6 +12,8 @@ from qgis.core import (
     QgsSymbol,
     QgsVectorLayer,
 )
+from qgis.PyQt.QtCore import QVariant
+from qgis.PyQt.QtGui import QColor
 
 from ..utils.configuration_handler import ConfigurationHandler
 from ..utils.external_api_handler import ExternalApiHandler

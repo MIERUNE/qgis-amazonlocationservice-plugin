@@ -1,9 +1,9 @@
 [project]
 name = "qgis-amazonlocationservice-plugin"
-version = "2.0.1"
+version = "4.0.0"
 description = "QGIS Plugin for Amazon Location Service"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
     { name = "MIERUNE Inc.", email = "info@mierune.co.jp" }
 ]
@@ -12,6 +12,7 @@ dependencies = []
 [dependency-groups]
 dev = [
     "pyqt5-stubs>=5.15.6.0",
+    "PyQt6-stubs>=6.4.0.0",
     "ruff>=0.14.0",
 ]
 
