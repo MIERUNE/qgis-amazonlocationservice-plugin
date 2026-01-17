@@ -1,6 +1,6 @@
 version = 1
 revision = 3
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 
 [[package]]
 name = "pyqt5-stubs"
@@ -12,13 +12,23 @@ wheels = [
 ]
 
 [[package]]
+name = "pyqt6-stubs"
+version = "20250824"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/eb/08/a5061968fed399314bd83f1b225092ff8102d9bdc9fd13b70010aaf7fb7e/pyqt6_stubs-20250824.tar.gz", hash = "sha256:f56958e34fb69e52c19ce24f5b59f181dde9a1e2fe0738aa8780e6b9a9b809d9", size = 331916, upload-time = "2025-08-24T12:04:49.343Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/54/57/08d3a5c19f2d2fd773d2329d19692e682ab9e2a6620c1a586a744d50b52b/pyqt6_stubs-20250824-py3-none-any.whl", hash = "sha256:4b77dc40f5dab7ca4ba899fff4c1db8de9cc73799ee98f56cae63349f18a6e52", size = 369983, upload-time = "2025-08-24T12:04:47.605Z" },
+]
+
+[[package]]
 name = "qgis-amazonlocationservice-plugin"
-version = "1.0.0"
+version = "4.0.0"
 source = { virtual = "." }
 
 [package.dev-dependencies]
 dev = [
     { name = "pyqt5-stubs" },
+    { name = "pyqt6-stubs" },
     { name = "ruff" },
 ]
 
@@ -27,6 +37,7 @@ dev = [
 [package.metadata.requires-dev]
 dev = [
     { name = "pyqt5-stubs", specifier = ">=5.15.6.0" },
+    { name = "pyqt6-stubs", specifier = ">=6.4.0.0" },
     { name = "ruff", specifier = ">=0.14.0" },
 ]
 

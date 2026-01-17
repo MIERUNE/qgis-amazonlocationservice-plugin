@@ -1,7 +1,7 @@
 import os
 
-from PyQt5.QtWidgets import QDialog, QMessageBox
 from qgis.PyQt import uic
+from qgis.PyQt.QtWidgets import QDialog, QMessageBox
 from qgis.utils import iface
 
 from ...functions.routes import RoutesFunctions

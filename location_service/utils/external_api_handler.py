@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from PyQt5.QtCore import QEventLoop, QUrl
-from PyQt5.QtNetwork import QNetworkReply, QNetworkRequest
 from qgis.core import QgsNetworkAccessManager
+from qgis.PyQt.QtCore import QEventLoop, QUrl
+from qgis.PyQt.QtNetwork import QNetworkReply, QNetworkRequest
 
 
 class ExternalApiHandler:
@@ -43,7 +43,7 @@ class ExternalApiHandler:
         event_loop = QEventLoop()
         reply = self.network_manager.post(request, encoded_data)
         reply.finished.connect(event_loop.quit)
-        event_loop.exec_()
+        event_loop.exec()
         return self.handle_network_reply(reply)
 
     def handle_network_reply(self, reply: QNetworkReply) -> dict[str, Any] | None:
