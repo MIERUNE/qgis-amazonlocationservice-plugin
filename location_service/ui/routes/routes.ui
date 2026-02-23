@@ -23,7 +23,7 @@
    <item>
     <widget class="QLabel" name="main_label">
      <property name="text">
-      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:18pt;&quot;&gt;Routes&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+      <string>Routes</string>
      </property>
      <property name="alignment">
       <set>Qt::AlignCenter</set>

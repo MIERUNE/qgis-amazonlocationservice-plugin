@@ -6,6 +6,7 @@ from qgis.utils import iface
 
 from ...functions.places import PlacesFunctions
 from ...utils.click_handler import MapClickCoordinateUpdater
+from ..style_loader import load_style
 
 
 class PlacesUi(QDialog):
@@ -22,6 +23,7 @@ class PlacesUi(QDialog):
         """
         super().__init__()
         self.ui = uic.loadUi(self.UI_PATH, self)
+        load_style(self)
         self.canvas = iface.mapCanvas()
         self.button_click.clicked.connect(self._click)
         self.button_search.clicked.connect(self._search)

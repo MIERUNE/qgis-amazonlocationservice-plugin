@@ -1,0 +1,197 @@
+/* ============================================
+   Amazon Location Service - QSS Theme
+   ============================================ */
+
+/* --- Dialog Base --- */
+QDialog {
+    background-color: #F5F7FA;
+    color: #16191F;
+}
+
+/* --- Labels --- */
+QLabel {
+    color: #16191F;
+    font-size: 13px;
+}
+
+/* --- Title Label --- */
+QLabel#main_label {
+    background-color: #232F3E;
+    color: #FFFFFF;
+    font-size: 16px;
+    font-weight: bold;
+    padding: 14px 16px;
+    border-radius: 6px;
+}
+
+/* --- Group Box --- */
+QGroupBox {
+    background-color: #FFFFFF;
+    border: 1px solid #D5DBDB;
+    border-radius: 6px;
+    padding: 20px 12px 12px 12px;
+    margin-top: 14px;
+    font-size: 13px;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 2px 10px;
+    color: #545B64;
+    font-weight: bold;
+    font-size: 12px;
+}
+
+/* --- Line Edit --- */
+QLineEdit {
+    border: 1px solid #D5DBDB;
+    border-radius: 4px;
+    padding: 7px 10px;
+    background-color: #FFFFFF;
+    color: #16191F;
+    font-size: 13px;
+    min-height: 18px;
+}
+
+QLineEdit:focus {
+    border: 2px solid #FF9900;
+    padding: 6px 9px;
+}
+
+QLineEdit:disabled {
+    background-color: #F2F3F3;
+    color: #687078;
+    border: 1px solid #D5DBDB;
+}
+
+/* --- Combo Box --- */
+QComboBox {
+    border: 1px solid #D5DBDB;
+    border-radius: 4px;
+    padding: 7px 10px;
+    background-color: #FFFFFF;
+    color: #16191F;
+    font-size: 13px;
+    min-height: 18px;
+}
+
+QComboBox:hover {
+    border: 1px solid #879596;
+}
+
+QComboBox:focus {
+    border: 2px solid #FF9900;
+    padding: 6px 9px;
+}
+
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 24px;
+    border-left: 1px solid #D5DBDB;
+    border-top-right-radius: 4px;
+    border-bottom-right-radius: 4px;
+    background-color: #FAFAFA;
+}
+
+QComboBox QAbstractItemView {
+    border: 1px solid #D5DBDB;
+    background-color: #FFFFFF;
+    selection-background-color: #FF9900;
+    selection-color: #16191F;
+    padding: 4px;
+}
+
+/* --- Primary Buttons (Save, Add, Search) --- */
+QPushButton#button_save,
+QPushButton#button_add,
+QPushButton#button_search {
+    background-color: #FF9900;
+    color: #16191F;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 24px;
+    font-size: 13px;
+    font-weight: bold;
+    min-height: 18px;
+}
+
+QPushButton#button_save:hover,
+QPushButton#button_add:hover,
+QPushButton#button_search:hover {
+    background-color: #EC7211;
+}
+
+QPushButton#button_save:pressed,
+QPushButton#button_add:pressed,
+QPushButton#button_search:pressed {
+    background-color: #D45B07;
+}
+
+/* --- Secondary Buttons (Get Location) --- */
+QPushButton#button_click,
+QPushButton#st_button_click,
+QPushButton#ed_button_click {
+    background-color: #FFFFFF;
+    color: #16191F;
+    border: 1px solid #545B64;
+    border-radius: 4px;
+    padding: 8px 24px;
+    font-size: 13px;
+    font-weight: bold;
+    min-height: 18px;
+}
+
+QPushButton#button_click:hover,
+QPushButton#st_button_click:hover,
+QPushButton#ed_button_click:hover {
+    background-color: #FAFAFA;
+    border: 1px solid #16191F;
+}
+
+QPushButton#button_click:pressed,
+QPushButton#st_button_click:pressed,
+QPushButton#ed_button_click:pressed {
+    background-color: #EAEDED;
+}
+
+/* --- Cancel Button --- */
+QPushButton#button_cancel {
+    background-color: #FFFFFF;
+    color: #545B64;
+    border: 1px solid #D5DBDB;
+    border-radius: 4px;
+    padding: 8px 24px;
+    font-size: 13px;
+    min-height: 18px;
+}
+
+QPushButton#button_cancel:hover {
+    background-color: #FAFAFA;
+    border: 1px solid #879596;
+    color: #16191F;
+}
+
+QPushButton#button_cancel:pressed {
+    background-color: #EAEDED;
+}
+
+/* --- Message Box --- */
+QMessageBox {
+    background-color: #F5F7FA;
+}
+
+QMessageBox QPushButton {
+    background-color: #FF9900;
+    color: #16191F;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 20px;
+    font-weight: bold;
+    min-width: 60px;
+}
+
+QMessageBox QPushButton:hover {
+    background-color: #EC7211;
+}
