@@ -4,6 +4,7 @@ from qgis.PyQt import uic
 from qgis.PyQt.QtWidgets import QDialog, QMessageBox
 
 from ...utils.configuration_handler import ConfigurationHandler
+from ..style_loader import load_style
 
 
 class ConfigUi(QDialog):
@@ -23,6 +24,7 @@ class ConfigUi(QDialog):
         """
         super().__init__()
         self.ui = uic.loadUi(self.UI_PATH, self)
+        load_style(self)
         self.button_save.clicked.connect(self._save)
         self.button_cancel.clicked.connect(self._cancel)
         self.configuration_handler = ConfigurationHandler()

@@ -5,6 +5,7 @@ from qgis.PyQt.QtWidgets import QDialog, QMessageBox
 
 from ...functions.maps import MapsFunctions
 from ...utils.configuration_handler import ConfigurationHandler
+from ..style_loader import load_style
 
 
 class MapsUi(QDialog):
@@ -22,6 +23,7 @@ class MapsUi(QDialog):
         """
         super().__init__()
         self.ui = uic.loadUi(self.UI_PATH, self)
+        load_style(self)
         self.button_add.clicked.connect(self._add)
         self.button_cancel.clicked.connect(self._cancel)
         self.maps = MapsFunctions()
