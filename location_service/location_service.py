@@ -11,6 +11,11 @@ from .ui.places.places import PlacesUi
 from .ui.routes.routes import RoutesUi
 from .ui.terms.terms import TermsUi
 
+try:
+    _WindowStaysOnTopHint = Qt.WindowStaysOnTopHint
+except AttributeError:
+    _WindowStaysOnTopHint = Qt.WindowType.WindowStaysOnTopHint
+
 
 class LocationService:
     """
@@ -114,28 +119,28 @@ class LocationService:
         """
         Displays the configuration dialog window.
         """
-        self.config.setWindowFlags(Qt.WindowStaysOnTopHint)  # type: ignore
+        self.config.setWindowFlags(_WindowStaysOnTopHint)  # type: ignore
         self.config.show()
 
     def show_maps(self) -> None:
         """
         Displays the maps dialog window.
         """
-        self.maps.setWindowFlags(Qt.WindowStaysOnTopHint)  # type: ignore
+        self.maps.setWindowFlags(_WindowStaysOnTopHint)  # type: ignore
         self.maps.show()
 
     def show_places(self) -> None:
         """
         Displays the places dialog window.
         """
-        self.places.setWindowFlags(Qt.WindowStaysOnTopHint)  # type: ignore
+        self.places.setWindowFlags(_WindowStaysOnTopHint)  # type: ignore
         self.places.show()
 
     def show_routes(self) -> None:
         """
         Displays the routes dialog window.
         """
-        self.routes.setWindowFlags(Qt.WindowStaysOnTopHint)  # type: ignore
+        self.routes.setWindowFlags(_WindowStaysOnTopHint)  # type: ignore
         self.routes.show()
 
     def show_terms(self) -> None:
