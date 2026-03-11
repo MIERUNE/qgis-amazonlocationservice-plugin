@@ -4,7 +4,7 @@ description=QGIS Plugin for Amazon Location Service
 about=This plugin uses the functionality of Amazon Location Service in QGIS.
 qgisMinimumVersion=3.34
 qgisMaximumVersion=4.99
-version=4.1.1
+version=4.1.2
 supportsQt6=True
 
 #Plugin main icon
