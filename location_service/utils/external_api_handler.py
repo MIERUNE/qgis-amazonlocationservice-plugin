@@ -7,6 +7,16 @@ from qgis.core import QgsNetworkAccessManager
 from qgis.PyQt.QtCore import QEventLoop, QUrl
 from qgis.PyQt.QtNetwork import QNetworkReply, QNetworkRequest
 
+try:
+    _ContentTypeHeader = QNetworkRequest.ContentTypeHeader
+except AttributeError:
+    _ContentTypeHeader = QNetworkRequest.KnownHeaders.ContentTypeHeader
+
+try:
+    _NoError = QNetworkReply.NoError
+except AttributeError:
+    _NoError = QNetworkReply.NetworkError.NoError
+
 
 class ExternalApiHandler:
     """
@@ -38,7 +48,7 @@ class ExternalApiHandler:
             if an error occurs.
         """
         request = QNetworkRequest(QUrl(url))
-        request.setHeader(QNetworkRequest.ContentTypeHeader, self.JSON_CONTENT_TYPE)
+        request.setHeader(_ContentTypeHeader, self.JSON_CONTENT_TYPE)
         encoded_data = json.dumps(data).encode(self.UTF8_ENCODING)
         event_loop = QEventLoop()
         reply = self.network_manager.post(request, encoded_data)
@@ -62,7 +72,7 @@ class ExternalApiHandler:
             as JSON.
         """
         try:
-            if reply.error() == QNetworkReply.NoError:  # type: ignore
+            if reply.error() == _NoError:  # type: ignore
                 response_data = reply.readAll().data().decode(self.UTF8_ENCODING)
                 return json.loads(response_data)
             else:
