@@ -1,6 +1,6 @@
 [project]
 name = "qgis-amazonlocationservice-plugin"
-version = "4.0.0"
+version = "4.1.1"
 description = "QGIS Plugin for Amazon Location Service"
 readme = "README.md"
 requires-python = ">=3.10"
