@@ -1,0 +1,148 @@
+MAP_STYLES = ("Standard", "Monochrome", "Hybrid", "Satellite")
+COLOR_SCHEMES = ("Light", "Dark")
+LANGUAGES = (
+    "Default",
+    "ar",
+    "as",
+    "az",
+    "be",
+    "bg",
+    "bn",
+    "bs",
+    "ca",
+    "cs",
+    "cy",
+    "da",
+    "de",
+    "el",
+    "en",
+    "es",
+    "et",
+    "eu",
+    "fi",
+    "fo",
+    "fr",
+    "ga",
+    "gl",
+    "gn",
+    "gu",
+    "he",
+    "hi",
+    "hr",
+    "hu",
+    "hy",
+    "id",
+    "is",
+    "it",
+    "ja",
+    "ka",
+    "kk",
+    "km",
+    "kn",
+    "ko",
+    "ky",
+    "lt",
+    "lv",
+    "mk",
+    "ml",
+    "mr",
+    "ms",
+    "mt",
+    "my",
+    "nl",
+    "no",
+    "or",
+    "pa",
+    "pl",
+    "pt",
+    "ro",
+    "ru",
+    "sk",
+    "sl",
+    "sq",
+    "sr",
+    "sv",
+    "ta",
+    "te",
+    "th",
+    "tr",
+    "uk",
+    "uz",
+    "vi",
+    "zh",
+)
+POLITICAL_VIEWS = (
+    ("Default", ""),
+    ("Argentina (ARG)", "ARG"),
+    ("Egypt (EGY)", "EGY"),
+    ("India (IND)", "IND"),
+    ("Kenya (KEN)", "KEN"),
+    ("Morocco (MAR)", "MAR"),
+    ("Russia (RUS)", "RUS"),
+    ("Sudan (SDN)", "SDN"),
+    ("Serbia (SRB)", "SRB"),
+    ("Suriname (SUR)", "SUR"),
+    ("Syria (SYR)", "SYR"),
+    ("Türkiye (TUR)", "TUR"),
+    ("Tanzania (TZA)", "TZA"),
+    ("Uruguay (URY)", "URY"),
+    ("Vietnam (VNM)", "VNM"),
+)
+CONTOUR_DENSITIES = (
+    ("None", ""),
+    ("Low", "Low"),
+    ("Medium", "Medium"),
+    ("High", "High"),
+)
+TRAFFIC_MODES = (
+    ("None", ""),
+    ("All", "All"),
+    ("Congestion", "Congestion"),
+)
+STYLE_SUPPORT: dict[str, tuple[str, ...]] = {
+    "Standard": (
+        "colorScheme",
+        "language",
+        "politicalView",
+        "terrain_hillshade",
+        "terrain_3d",
+        "contourDensity",
+        "traffic",
+        "travelModes",
+        "buildings",
+    ),
+    "Monochrome": (
+        "colorScheme",
+        "language",
+        "politicalView",
+        "terrain_hillshade",
+        "terrain_3d",
+        "contourDensity",
+        "traffic",
+        "travelModes",
+        "buildings",
+    ),
+    "Hybrid": (
+        "colorScheme",
+        "language",
+        "politicalView",
+        "terrain_3d",
+        "contourDensity",
+        "traffic",
+        "travelModes",
+    ),
+    "Satellite": ("colorScheme", "terrain_3d"),
+}
+RENDERER_UNSUPPORTED = ("language", "terrain_3d", "buildings")
+RENDERER_TOOLTIP_LANGUAGE = (
+    "Label language switching is not currently supported by this plugin. "
+    "The selection has no effect."
+)
+RENDERER_TOOLTIP_BUILDINGS = (
+    "3D Buildings rendering is not currently supported by this plugin."
+)
+RENDERER_TOOLTIP_TERRAIN = (
+    "Terrain3D is not currently supported by this plugin. "
+    "Only Hillshade can be rendered (Standard / Monochrome only)."
+)
+STYLE_TOOLTIP_NOT_SUPPORTED = "This option is not supported by the {style} map style."
