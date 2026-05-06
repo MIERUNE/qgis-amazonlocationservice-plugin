@@ -58,9 +58,19 @@ QGISでAmazon Location Service v2の機能を利用するプラグインです�
 ![maps](img/maps.gif)
 
 1. 「Maps」メニューをクリック
-2. 「Map Name」を選択
-3. 「Add」をクリック
-4. 背景地図がレイヤで表示
+2. 「Style」を選択（Standard / Monochrome / Hybrid / Satellite）
+3. 「Color Scheme」を選択（Light / Dark）
+4. （任意）スタイル詳細オプションを設定
+    - Language: 地名ラベルの言語
+    - Political View: 国境表示の地政学的視点
+    - Terrain: 陰影起伏の重ね合わせ
+    - Contour Density: 等高線の密度（Low / Medium / High）
+    - Traffic: 交通情報（All / Congestion）
+    - Travel Modes: 交通手段（Transit / Truck）
+5. 「Add」をクリック
+6. 背景地図がレイヤで表示
+
+※ 2026.05現在、Buildings3DとTerrain3Dは未対応
 
 ### Places機能
 
