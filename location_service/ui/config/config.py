@@ -14,7 +14,7 @@ class ConfigUi(QDialog):
 
     UI_PATH = os.path.join(os.path.dirname(__file__), "config.ui")
     KEY_REGION = "region_value"
-    KEY_APIKEY = "apikey_value"
+    KEY_APIKEY = "apikey_value"  # pragma: allowlist secret
 
     def __init__(self) -> None:
         """

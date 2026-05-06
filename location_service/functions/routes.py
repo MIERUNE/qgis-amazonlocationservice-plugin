@@ -25,7 +25,7 @@ class RoutesFunctions:
     """
 
     KEY_REGION = "region_value"
-    KEY_APIKEY = "apikey_value"
+    KEY_APIKEY = "apikey_value"  # pragma: allowlist secret
     WGS84_CRS = "EPSG:4326"
     LAYER_TYPE = "LineString"
     FIELD_ROADNAME = "RoadName"
