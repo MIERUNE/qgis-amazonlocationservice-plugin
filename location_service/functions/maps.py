@@ -46,9 +46,18 @@ class MapsFunctions:
 
         Returns:
             tuple[str, str]: A tuple containing the region and API key.
+
+        Raises:
+            ValueError: If the region or API key is missing or empty.
         """
         region = self.configuration_handler.get_setting(self.KEY_REGION)
         apikey = self.configuration_handler.get_setting(self.KEY_APIKEY)
+
+        if not region or not str(region).strip():
+            raise ValueError("Missing required configuration setting: region")
+        if not apikey or not str(apikey).strip():
+            raise ValueError("Missing required configuration setting: apikey")
+
         return region, apikey
 
     def build_tile_url(self, region: str, apikey: str, options: MapsOptions) -> str:
