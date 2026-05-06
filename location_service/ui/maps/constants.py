@@ -133,11 +133,7 @@ STYLE_SUPPORT: dict[str, tuple[str, ...]] = {
     ),
     "Satellite": ("colorScheme", "terrain_3d"),
 }
-RENDERER_UNSUPPORTED = ("language", "terrain_3d", "buildings")
-RENDERER_TOOLTIP_LANGUAGE = (
-    "Label language switching is not currently supported by this plugin. "
-    "The selection has no effect."
-)
+RENDERER_UNSUPPORTED = ("terrain_3d", "buildings")
 RENDERER_TOOLTIP_BUILDINGS = (
     "3D Buildings rendering is not currently supported by this plugin."
 )

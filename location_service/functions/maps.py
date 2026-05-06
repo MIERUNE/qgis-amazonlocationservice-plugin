@@ -63,9 +63,9 @@ class MapsFunctions:
         traffic, travelModes, buildings) are therefore omitted when
         ``style == 'Satellite'``.
 
-        Note:
-            `language` is intentionally never sent. Server-side label language
-            switching is not currently supported by the proxy renderer.
+        The ``language`` parameter is consumed by the proxy wrapper (not by AWS).
+        The wrapper rewrites the style descriptor's ``text-field`` expressions to
+        ``name:{language}`` before chiitiler renders the tile.
 
         Args:
             region (str): Amazon Location Service region value.
@@ -89,6 +89,8 @@ class MapsFunctions:
             for key, value in optional_params.items():
                 if value:
                     params[key] = value
+            if options.language and options.language != "Default":
+                params["language"] = options.language
             if options.travel_modes:
                 params["travelModes"] = ",".join(options.travel_modes)
             if options.buildings_3d:

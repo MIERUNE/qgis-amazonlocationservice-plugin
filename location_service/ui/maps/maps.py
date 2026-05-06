@@ -13,7 +13,6 @@ from .constants import (
     MAP_STYLES,
     POLITICAL_VIEWS,
     RENDERER_TOOLTIP_BUILDINGS,
-    RENDERER_TOOLTIP_LANGUAGE,
     RENDERER_TOOLTIP_TERRAIN,
     RENDERER_UNSUPPORTED,
     STYLE_SUPPORT,
@@ -126,10 +125,11 @@ class MapsUi(QDialog):
             "colorScheme",
         )
 
-        self.language_comboBox.setEnabled(False)
-        self.language_comboBox.setCurrentText("Default")
-        self.language_comboBox.setToolTip(RENDERER_TOOLTIP_LANGUAGE)
-
+        self._apply_combobox_constraint(
+            self.language_comboBox,
+            style,
+            "language",
+        )
         self._apply_combobox_constraint(
             self.political_view_comboBox,
             style,
