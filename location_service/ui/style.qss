@@ -103,6 +103,43 @@ QComboBox QAbstractItemView {
     padding: 4px;
 }
 
+QComboBox:disabled {
+    background-color: #F2F3F3;
+    color: #687078;
+    border: 1px solid #D5DBDB;
+}
+
+/* --- Scroll Area --- */
+QScrollArea {
+    background-color: transparent;
+    border: none;
+}
+
+QScrollArea > QWidget > QWidget {
+    background-color: transparent;
+}
+
+QScrollBar:vertical {
+    background: #F5F7FA;
+    width: 10px;
+    margin: 0;
+}
+
+QScrollBar::handle:vertical {
+    background: #D5DBDB;
+    border-radius: 4px;
+    min-height: 24px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: #879596;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0;
+}
+
 /* --- Primary Buttons (Save, Add, Search) --- */
 QPushButton#button_save,
 QPushButton#button_add,
@@ -175,6 +212,41 @@ QPushButton#button_cancel:hover {
 
 QPushButton#button_cancel:pressed {
     background-color: #EAEDED;
+}
+
+/* --- Check Box --- */
+QCheckBox {
+    color: #16191F;
+    font-size: 13px;
+    spacing: 6px;
+    margin-top: 6px;
+}
+
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #D5DBDB;
+    border-radius: 3px;
+    background-color: #FFFFFF;
+}
+
+QCheckBox::indicator:hover {
+    border: 1px solid #879596;
+}
+
+QCheckBox::indicator:checked {
+    background-color: #FF9900;
+    border: 1px solid #EC7211;
+    image: url(${CHECKMARK_PATH});
+}
+
+QCheckBox:disabled {
+    color: #687078;
+}
+
+QCheckBox::indicator:disabled {
+    background-color: #F2F3F3;
+    border: 1px solid #D5DBDB;
 }
 
 /* --- Message Box --- */

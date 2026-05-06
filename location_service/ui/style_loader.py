@@ -3,7 +3,9 @@ import os
 from qgis.core import Qgis, QgsMessageLog
 from qgis.PyQt.QtWidgets import QWidget
 
-STYLE_PATH = os.path.join(os.path.dirname(__file__), "style.qss")
+_UI_DIR = os.path.dirname(__file__)
+STYLE_PATH = os.path.join(_UI_DIR, "style.qss")
+CHECKMARK_PATH = os.path.join(_UI_DIR, "checkmark.svg").replace("\\", "/")
 
 
 def load_style(widget: QWidget) -> None:
@@ -15,7 +17,8 @@ def load_style(widget: QWidget) -> None:
     """
     try:
         with open(STYLE_PATH, encoding="utf-8") as f:
-            widget.setStyleSheet(f.read())
+            qss = f.read().replace("${CHECKMARK_PATH}", CHECKMARK_PATH)
+            widget.setStyleSheet(qss)
     except (OSError, UnicodeDecodeError) as e:
         QgsMessageLog.logMessage(
             f"Failed to load style: {e!r}",
