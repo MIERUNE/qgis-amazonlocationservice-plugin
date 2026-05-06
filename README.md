@@ -58,9 +58,19 @@ Plugins can also be installed by loading a [zip file](https://github.com/MIERUNE
 ![maps](img/maps.gif)
 
 1. Click the “Maps” menu
-2. Select “Map Name“
-3. Click “Add“
-4. The map is displayed as a layer
+2. Select a “Style” (Standard / Monochrome / Hybrid / Satellite)
+3. Choose “Color Scheme” (Light / Dark)
+4. (Optional) Configure style descriptor options:
+    - Language: label language for place names
+    - Political View: country-specific border representation
+    - Terrain: Hillshade overlay
+    - Contour Density: Low / Medium / High
+    - Traffic: All / Congestion
+    - Travel Modes: Transit / Truck
+5. Click “Add”
+6. The map is displayed as a layer
+
+※ As of May 2026, Buildings3D and Terrain3D are not supported.
 
 ### Places Function
 
