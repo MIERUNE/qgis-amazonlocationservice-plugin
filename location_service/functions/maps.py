@@ -130,10 +130,6 @@ class MapsFunctions:
         try:
             region_value, apikey_value = self.get_configuration_settings()
             tile_url = self.build_tile_url(region_value, apikey_value, options)
-            # {z}/{x}/{y} placeholders must remain unencoded for QGIS to
-            # substitute them. ',' is preserved so travelModes (e.g.
-            # "Transit,Truck") is not double-encoded, and '%' is preserved
-            # so existing percent-encoded query values are not encoded again.
             encoded_tile_url = quote(tile_url, safe=":/?{}=,%")
             layer_url = f"type=xyz&url={encoded_tile_url}&zmin=0&zmax=18"
             layer_name = self.compose_layer_name(options)
