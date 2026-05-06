@@ -31,7 +31,7 @@ class MapsFunctions:
     """
 
     KEY_REGION = "region_value"
-    KEY_APIKEY = "apikey_value"
+    KEY_APIKEY = "apikey_value"  # pragma: allowlist secret
     BASE_URL = "https://als.dayjournal.dev"
 
     def __init__(self) -> None:

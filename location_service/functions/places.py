@@ -28,7 +28,7 @@ class PlacesFunctions:
     """
 
     KEY_REGION = "region_value"
-    KEY_APIKEY = "apikey_value"
+    KEY_APIKEY = "apikey_value"  # pragma: allowlist secret
     PLACES_LANGUAGE = None
     PLACES_MAX_RESULTS = 10
     WGS84_CRS = "EPSG:4326"
