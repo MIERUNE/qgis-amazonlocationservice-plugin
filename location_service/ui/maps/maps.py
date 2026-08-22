@@ -1,10 +1,19 @@
 import os
+from typing import Optional
 
 from qgis.PyQt import uic
-from qgis.PyQt.QtWidgets import QComboBox, QDialog, QMessageBox
+from qgis.PyQt.QtWidgets import QComboBox, QDialog, QWidget
 
 from ...functions.maps import MapsFunctions, MapsOptions
-from ...utils.configuration_handler import ConfigurationHandler
+from ...utils.configuration_handler import ConfigurationError
+from ...utils.feedback import (
+    SUCCESS,
+    WARNING,
+    busy_operation,
+    push_message,
+    show_config_error,
+    show_error,
+)
 from ..style_loader import load_style
 from .constants import (
     COLOR_SCHEMES,
@@ -22,33 +31,43 @@ from .constants import (
 
 
 class MapsUi(QDialog):
-    """
-    A dialog for managing maps configurations and adding XYZ tile (raster)
-    layers to a QGIS project.
-    """
+    """Adds configured Amazon Location basemaps to QGIS as XYZ tile layers."""
 
     UI_PATH = os.path.join(os.path.dirname(__file__), "maps.ui")
 
-    def __init__(self) -> None:
-        """
-        Initializes the Maps dialog, loads UI components, and populates the maps options.
-        """
-        super().__init__()
-        self.ui = uic.loadUi(self.UI_PATH, self)
-        load_style(self)
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        """Loads the dialog, connects its controls, and populates map options."""
+        super().__init__(parent)
+        uic.loadUi(self.UI_PATH, self)
+        self._apply_style()
         self.button_add.clicked.connect(self._add)
         self.button_cancel.clicked.connect(self._cancel)
         self.style_comboBox.currentTextChanged.connect(self._on_style_changed)
         self.maps = MapsFunctions()
-        self.configuration_handler = ConfigurationHandler()
         self._populate_maps_options()
         self._on_style_changed(self.style_comboBox.currentText())
 
+    def _apply_style(self) -> None:
+        """Applies QSS locally across the scroll tree for QGIS 3 dark themes."""
+        scroll_contents = self.scrollArea.widget()
+        # QGIS 3's application theme can override an inherited stylesheet at
+        # the QScrollArea boundary. Giving each descendant a local stylesheet
+        # keeps the plugin theme authoritative on Qt 5 as well as Qt 6.
+        load_style(
+            self,
+            self.scrollArea,
+            self.scrollArea.viewport(),
+            scroll_contents,
+            *scroll_contents.findChildren(QWidget),
+        )
+
+    def showEvent(self, event) -> None:
+        """Reapplies the Maps theme after QGIS finishes polishing the window."""
+        super().showEvent(event)
+        self._apply_style()
+
     def _populate_maps_options(self) -> None:
-        """
-        Populates the maps options dropdown with available configurations.
-        Terrain items are populated dynamically by ``_on_style_changed``.
-        """
+        """Populates map options other than terrain, which depends on the style."""
         for style in MAP_STYLES:
             self.style_comboBox.addItem(style)
         for scheme in COLOR_SCHEMES:
@@ -63,13 +82,7 @@ class MapsUi(QDialog):
             self.traffic_comboBox.addItem(label, code)
 
     def _set_terrain_items(self, items: tuple[tuple[str, str], ...]) -> None:
-        """
-        Replaces the items in the terrain combo box while preserving the
-        current selection if still valid.
-
-        Args:
-            items (tuple[tuple[str, str], ...]): The new set of (label, code) pairs.
-        """
+        """Replaces terrain options, keeping the current value when possible."""
         current_code = (
             self.terrain_comboBox.currentData() if self.terrain_comboBox.count() else ""
         )
@@ -82,11 +95,7 @@ class MapsUi(QDialog):
         self.terrain_comboBox.blockSignals(False)
 
     def _is_feature_active(self, style: str, feature: str) -> bool:
-        """
-        Returns ``True`` when ``feature`` is both supported by the Amazon Location Service Maps V2
-        GetStyleDescriptor matrix for ``style`` and renderable by the
-        chiitiler pipeline.
-        """
+        """Returns whether Maps V2 and chiitiler both support a style feature."""
         if feature in RENDERER_UNSUPPORTED:
             return False
         return feature in STYLE_SUPPORT.get(style, ())
@@ -101,7 +110,7 @@ class MapsUi(QDialog):
         style: str,
         feature: str,
     ) -> None:
-        """Toggle a combobox based on style support, resetting it when disabled."""
+        """Enables a combo box when supported; otherwise resets and disables it."""
         enabled = self._is_feature_active(style, feature)
         combo.setEnabled(enabled)
         if enabled:
@@ -111,40 +120,16 @@ class MapsUi(QDialog):
             combo.setToolTip(self._style_disabled_tooltip(style))
 
     def _on_style_changed(self, style: str) -> None:
-        """
-        Updates UI constraints based on the selected map style following the
-        Amazon Location Service Maps V2 GetStyleDescriptor matrix combined with
-        the chiitiler renderer limitations.
-
-        Args:
-            style (str): The newly selected style name.
-        """
-        self._apply_combobox_constraint(
-            self.colorscheme_comboBox,
-            style,
-            "colorScheme",
+        """Updates controls for the selected style and renderer capabilities."""
+        constraints = (
+            (self.colorscheme_comboBox, "colorScheme"),
+            (self.language_comboBox, "language"),
+            (self.political_view_comboBox, "politicalView"),
+            (self.contour_density_comboBox, "contourDensity"),
+            (self.traffic_comboBox, "traffic"),
         )
-
-        self._apply_combobox_constraint(
-            self.language_comboBox,
-            style,
-            "language",
-        )
-        self._apply_combobox_constraint(
-            self.political_view_comboBox,
-            style,
-            "politicalView",
-        )
-        self._apply_combobox_constraint(
-            self.contour_density_comboBox,
-            style,
-            "contourDensity",
-        )
-        self._apply_combobox_constraint(
-            self.traffic_comboBox,
-            style,
-            "traffic",
-        )
+        for combo, feature in constraints:
+            self._apply_combobox_constraint(combo, style, feature)
 
         travel_modes_enabled = self._is_feature_active(style, "travelModes")
         self.transit_checkBox.setEnabled(travel_modes_enabled)
@@ -171,12 +156,7 @@ class MapsUi(QDialog):
         self.terrain_comboBox.setToolTip(RENDERER_TOOLTIP_TERRAIN)
 
     def _selected_travel_modes(self) -> list[str]:
-        """
-        Collects the checked travel modes.
-
-        Returns:
-            list[str]: The selected travel mode names.
-        """
+        """Returns the selected travel mode names."""
         modes: list[str] = []
         if self.transit_checkBox.isChecked():
             modes.append("Transit")
@@ -185,9 +165,7 @@ class MapsUi(QDialog):
         return modes
 
     def _add(self) -> None:
-        """
-        Adds the selected XYZ tile (raster) layer to the QGIS project and closes the dialog.
-        """
+        """Adds the selected basemap to the project."""
         try:
             options = MapsOptions(
                 style=self.style_comboBox.currentText(),
@@ -200,20 +178,24 @@ class MapsUi(QDialog):
                 travel_modes=self._selected_travel_modes(),
                 buildings_3d=self.buildings3d_checkBox.isChecked(),
             )
-            self.maps.add_xyz_tile_layer(options)
-            self.close()
-        except KeyError as e:
-            QMessageBox.warning(
-                self,
-                "Configuration Error",
-                f"Required configuration is missing: {e}. "
-                "Please check your API key and region in the settings.",
+            with busy_operation(self.button_add, "Adding…"):
+                self.maps.add_xyz_tile_layer(options)
+            push_message(
+                SUCCESS,
+                f"Added the “{options.style} {options.color_scheme}” basemap.",
             )
+            push_message(
+                WARNING,
+                "Note: the basemap layer's source URI contains your API key and "
+                "is saved in plain text inside the QGIS project file.",
+                duration=8,
+            )
+            self.close()
+        except ConfigurationError as e:
+            show_config_error(self, e)
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to add XYZ tile layer: {e!r}")
+            show_error(self, "Error", f"Failed to add XYZ tile layer: {e}")
 
     def _cancel(self) -> None:
-        """
-        Cancels the operation and closes the dialog without making changes.
-        """
+        """Closes the dialog without adding a basemap."""
         self.close()
