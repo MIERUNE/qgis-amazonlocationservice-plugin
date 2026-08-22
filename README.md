@@ -13,9 +13,6 @@ This plugin uses the functionality of Amazon Location Service v2 in QGIS.
 
 [Amazon Location Service Plugin](https://plugins.qgis.org/plugins/location_service)  
 
-## blog
-
-
 ## Usage
 
 ### Building an Amazon Location Service API Key
@@ -28,8 +25,8 @@ This plugin uses the functionality of Amazon Location Service v2 in QGIS.
 
 ![plugin](img/plugin.png)
 
-1. Select "Plugins" → "Manage and Install Plugins..."
-2. Search for "Amazon Location Service"
+1. Select `Plugins` → `Manage and Install Plugins...`
+2. Search for `Amazon Location Service`
 
 Plugins can also be installed by loading a [zip file](https://github.com/MIERUNE/qgis-amazonlocationservice-plugin/releases).
 
@@ -37,73 +34,78 @@ Plugins can also be installed by loading a [zip file](https://github.com/MIERUNE
 
 ![menu](img/menu.png)
 
-- Config: Set each region name and API key
-- Maps: Map display function
-- Places: Geocoding function
-- Routes: Routing function
-- Terms: Display Terms of Use page
+- `Config`: Set each region name and API key
+- `Maps`: Map display function
+- `Places`: Geocoding function
+- `Routes`: Routing function
+- `Terms`: Display Terms of Use page
 
 ### Config Function
 
 ![config](img/config.png)
 
-1. Click the “Config” menu
+1. Click the `Config` menu
 2. Set each region name and API key
-    - Region: ap-xxxxx
-    - API Key: v1.public.xxxxx
-3. Click “Save“
+    - `Region`: an AWS region code such as `ap-northeast-1`
+    - `API Key`: `v1.public.xxxxx`
+3. Click `Save`
 
 ### Maps Function
 
 ![maps](img/maps.gif)
 
-1. Click the “Maps” menu
-2. Select a “Style” (Standard / Monochrome / Hybrid / Satellite)
-3. Choose “Color Scheme” (Light / Dark)
+1. Click the `Maps` menu
+2. Select a `Style` (Standard / Monochrome / Hybrid / Satellite)
+3. Choose a `Color Scheme` (Light / Dark)
 4. (Optional) Configure style descriptor options:
-    - Language: label language for place names
-    - Political View: country-specific border representation
-    - Terrain: Hillshade overlay
-    - Contour Density: Low / Medium / High
-    - Traffic: All / Congestion
-    - Travel Modes: Transit / Truck
-5. Click “Add”
+    - `Language`: label language for place names
+    - `Political View`: country-specific border representation
+    - `Terrain`: Hillshade overlay
+    - `Contour Density`: Low / Medium / High
+    - `Traffic`: All / Congestion
+    - `Travel Modes`: Transit / Truck
+5. Click `Add`
 6. The map is displayed as a layer
 
-※ As of May 2026, Buildings3D and Terrain3D are not supported.
+#### API key handling
+
+- Map tile requests go through the plugin's [proxy](https://als.dayjournal.dev) rather than directly to AWS. Each request includes the configured API key.
+- The Maps layer source URI contains the API key. Saving the QGIS project stores the key as plain text in the project file.
+
+※ As of August 2026, `Buildings3D` and `Terrain3D` are not supported.
 
 ### Places Function
 
 ![places](img/places.gif)
 
-1. Click the “Places” menu
-2. Select “Select Function“
-3. Enter text in “QueryText“
-4. Click “Get Location“
+1. Click the `Places` menu
+2. Select `Select Function`
+3. Enter text in `QueryText`
+4. Click `Get Location`
 5. Click on the location you wish to search
-6. Click “Search”
+6. Click `Search`
 7. Search results are displayed in layers
 
-※ As of January 2025, only ”SearchText” is available.
+※ As of January 2025, only `SearchText` is available.
 
 ### Routes Function
 
 ![routes](img/routes.gif)
 
-1. Click the “Routes” menu
-2. Select “Select Function“
-3. Click “Get Location(Starting Point)“
+1. Click the `Routes` menu
+2. Select `Select Function`
+3. Click `Get Location(Starting Point)`
 4. Click the starting point
-5. Click “Get Location(End Point)“
+5. Click `Get Location(End Point)`
 6. Click on the endpoint
-7. Click “Search”
+7. Click `Search`
 8. Search results are displayed in layers
 
-※ As of January 2025, only ”CalculateRoute” is available.
+※ As of January 2025, only `CalculateRoutes` is available.
 
 ### Terms Function
 
-1. Click the “Terms” menu
+1. Click the `Terms` menu
 2. The Terms of Use page will be displayed in your browser.
 
 ### Terms
@@ -122,7 +124,7 @@ b. Layer routes from HERE on top of a map from another third-party provider, or 
 ### Requirements
 
 - [uv](https://docs.astral.sh/uv/)
-- QGIS 3.x
+- QGIS 3.34 or later (including QGIS 4.x)
 
 ### Setup
 
@@ -155,6 +157,8 @@ mklink /D "%APPDATA%\QGIS\QGIS3\profiles\default\python\plugins\location_service
 ```bash
 ln -s /path/to/location_service ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/location_service
 ```
+
+For QGIS 4, replace `QGIS3` with `QGIS4` in the profile path.
 
 After editing the code, reload the plugin in QGIS to see the changes.
 
