@@ -27,7 +27,13 @@ jobs:
       - name: Create Archive
         run: |
           archive_name="${PLUGIN_NAME}-${RELEASE_TAG}.zip"
-          zip -r "$archive_name" "./${PLUGIN_NAME}"
+          git archive \
+            --format=zip \
+            --output="$archive_name" \
+            HEAD \
+            "$PLUGIN_NAME" \
+            ":(exclude)$PLUGIN_NAME/tests" \
+            ":(exclude)$PLUGIN_NAME/test_suite.py"
 
       - name: Upload release asset
         env:
