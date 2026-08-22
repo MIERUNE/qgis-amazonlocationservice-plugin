@@ -36,6 +36,15 @@ jobs:
           docker pull "$DOCKER_IMAGE":${{ matrix.docker_tags }}
           docker run -dt --name qgis-testing-environment -v .:/tests_directory/location_service ${{ matrix.docker_env }} "$DOCKER_IMAGE":${{ matrix.docker_tags }}
 
+      - name: Wait for QGIS 3 virtual display
+        if: matrix.docker_tags == 'release-3_34'
+        timeout-minutes: 1
+        run: |
+          until docker exec qgis-testing-environment \
+            sh -c '[ -S /tmp/.X11-unix/X99 ]'; do
+            sleep 1
+          done
+
       - name: Install QGIS 4 test runner dependency
         if: matrix.docker_tags == '4.2'
         run: |
@@ -51,5 +60,10 @@ jobs:
           docker exec qgis-testing-environment sh -c "ln -s /tests_directory/location_service/location_service /root/.local/share/QGIS/${{ matrix.profile_root }}/profiles/default/python/plugins/location_service"
 
       - name: Docker run plugin tests
+        timeout-minutes: 5
         run: |
           docker exec qgis-testing-environment sh -c "qgis_testrunner.sh location_service.test_suite.test_package"
+
+      - name: Show QGIS container logs on failure
+        if: failure()
+        run: docker logs qgis-testing-environment
