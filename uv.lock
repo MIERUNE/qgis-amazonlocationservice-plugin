@@ -22,7 +22,7 @@ wheels = [
 
 [[package]]
 name = "qgis-amazonlocationservice-plugin"
-version = "4.3.0"
+version = "4.3.1"
 source = { virtual = "." }
 
 [package.dev-dependencies]
