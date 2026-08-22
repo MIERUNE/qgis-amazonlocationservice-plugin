@@ -14,30 +14,56 @@ jobs:
     runs-on: ubuntu-latest
 
     strategy:
+      fail-fast: false
       matrix:
-        docker_tags: [release-3_34]
+        # qgis_setup.sh creates only the QGIS3 profile path; QGIS4 is created below.
+        include:
+          - docker_tags: release-3_34
+            profile_root: QGIS3
+            # The 3.34 image runs Xvfb on :99 via supervisord.
+            docker_env: -e DISPLAY=:99
+          - docker_tags: "4.2"
+            profile_root: QGIS4
+            # The QGIS 4 CLI requires DISPLAY even with offscreen rendering.
+            docker_env: -e DISPLAY=:99 -e QT_QPA_PLATFORM=offscreen
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Export requirements.txt
-        run: |
-          pip3 install uv
-          uv export -o requirements.txt --no-dev --no-hashes
-
       - name: Docker pull and create qgis-testing-environment
         run: |
           docker pull "$DOCKER_IMAGE":${{ matrix.docker_tags }}
-          docker run -d --name qgis-testing-environment -v .:/tests_directory/location_service -e DISPLAY=:99 "$DOCKER_IMAGE":${{ matrix.docker_tags }}
+          docker run -dt --name qgis-testing-environment -v .:/tests_directory/location_service ${{ matrix.docker_env }} "$DOCKER_IMAGE":${{ matrix.docker_tags }}
+
+      - name: Wait for QGIS 3 virtual display
+        if: matrix.docker_tags == 'release-3_34'
+        timeout-minutes: 1
+        run: |
+          until docker exec qgis-testing-environment \
+            sh -c '[ -S /tmp/.X11-unix/X99 ]'; do
+            sleep 1
+          done
+
+      - name: Install QGIS 4 test runner dependency
+        if: matrix.docker_tags == '4.2'
+        run: |
+          # qgis_testrunner.sh needs expect's unbuffer command, absent from this image.
+          docker exec qgis-testing-environment apt-get update
+          docker exec qgis-testing-environment apt-get install -y --no-install-recommends expect
 
       - name: Docker set up QGIS
         run: |
           docker exec qgis-testing-environment sh -c "qgis_setup.sh location_service"
-          docker exec qgis-testing-environment sh -c "rm -f /root/.local/share/QGIS/QGIS3/profiles/default/python/plugins/location_service"
-          docker exec qgis-testing-environment sh -c "ln -s /tests_directory/location_service/location_service /root/.local/share/QGIS/QGIS3/profiles/default/python/plugins/location_service"
-          docker exec qgis-testing-environment sh -c "pip3 install -r /tests_directory/location_service/requirements.txt"
+          docker exec qgis-testing-environment sh -c "mkdir -p /root/.local/share/QGIS/${{ matrix.profile_root }}/profiles/default/python/plugins"
+          docker exec qgis-testing-environment sh -c "rm -f /root/.local/share/QGIS/${{ matrix.profile_root }}/profiles/default/python/plugins/location_service"
+          docker exec qgis-testing-environment sh -c "ln -s /tests_directory/location_service/location_service /root/.local/share/QGIS/${{ matrix.profile_root }}/profiles/default/python/plugins/location_service"
 
       - name: Docker run plugin tests
+        timeout-minutes: 5
         run: |
           docker exec qgis-testing-environment sh -c "qgis_testrunner.sh location_service.test_suite.test_package"
+
+      - name: Show QGIS container logs on failure
+        if: failure()
+        run: docker logs qgis-testing-environment

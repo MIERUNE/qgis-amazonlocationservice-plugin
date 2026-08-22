@@ -1,4 +1,5 @@
 from typing import Any
+from urllib.parse import quote
 
 from qgis.core import (
     QgsFeature,
@@ -23,12 +24,8 @@ from ..utils.external_api_handler import ExternalApiHandler
 
 
 class PlacesFunctions:
-    """
-    Manages the searching and visualization of places based on coordinates.
-    """
+    """Searches for places and creates their point layer."""
 
-    KEY_REGION = "region_value"
-    KEY_APIKEY = "apikey_value"  # pragma: allowlist secret
     PLACES_LANGUAGE = None
     PLACES_MAX_RESULTS = 10
     WGS84_CRS = "EPSG:4326"
@@ -44,39 +41,16 @@ class PlacesFunctions:
     LABEL_TEXT_SIZE = 10
 
     def __init__(self) -> None:
-        """
-        Initializes the PlaceFunctions with configuration and API handlers.
-        """
+        """Initializes the configuration and API handlers."""
         self.configuration_handler = ConfigurationHandler()
         self.api_handler = ExternalApiHandler()
 
-    def get_configuration_settings(self) -> tuple[str, str]:
-        """
-        Fetches necessary configuration settings from the settings manager.
-
-        Returns:
-            Tuple[str, str]: A tuple containing the
-            region and API key.
-        """
-        region = self.configuration_handler.get_setting(self.KEY_REGION)
-        apikey = self.configuration_handler.get_setting(self.KEY_APIKEY)
-        return region, apikey
-
     def search_text(self, text: str, lon: float, lat: float) -> dict[str, Any]:
-        """
-        Searches for a places index based on the provided longitude and
-        latitude coordinates.
-
-        Args:
-            lon (float): Longitude of the position to search.
-            lat (float): Latitude of the position to search.
-
-        Returns:
-            A dictionary containing the API request results with place information.
-        """
-        region, apikey = self.get_configuration_settings()
+        """Searches for places near the supplied position."""
+        region, apikey = self.configuration_handler.get_credentials()
         place_url = (
-            f"https://places.geo.{region}.amazonaws.com/v2/search-text?key={apikey}"
+            f"https://places.geo.{region}.amazonaws.com/v2/search-text"
+            f"?key={quote(apikey, safe='')}"
         )
         data = {
             "Language": self.PLACES_LANGUAGE,
@@ -84,33 +58,17 @@ class PlacesFunctions:
             "QueryText": text,
             "BiasPosition": [lon, lat],
         }
-        result = self.api_handler.send_json_post_request(place_url, data)
-        if result is None:
-            raise Exception("Failed to receive a valid response from the API.")
-        return result
+        return self.api_handler.send_json_post_request(place_url, data)
 
     def add_point_layer(self, data: dict) -> None:
-        """
-        Adds a new point layer to the current QGIS project based on search results.
-
-        Args:
-            data (Dict): Data containing results from the search, including
-                         location and place information.
-        """
+        """Adds search results to the current project as a point layer."""
         layer = QgsVectorLayer(
             f"{self.LAYER_TYPE}?crs={self.WGS84_CRS}", "SearchText", "memory"
         )
         self.setup_layer(layer, data)
 
     def setup_layer(self, layer: QgsVectorLayer, data: dict) -> None:
-        """
-        Configures the given layer with attributes, features,
-        styling, and labeling based on search results.
-
-        Args:
-            layer (QgsVectorLayer): The vector layer to be configured.
-            data (Dict): Search results data used to populate the layer.
-        """
+        """Populates, styles, and adds the point layer to the project."""
         self.add_attributes(layer)
         self.add_features(layer, data)
         self.apply_layer_style(layer)
@@ -119,12 +77,7 @@ class PlacesFunctions:
         QgsProject.instance().addMapLayer(layer)
 
     def add_attributes(self, layer: QgsVectorLayer) -> None:
-        """
-        Adds necessary fields to the vector layer.
-
-        Args:
-            layer (QgsVectorLayer): The layer to which fields are added.
-        """
+        """Adds place-result fields to the layer."""
         fields = QgsFields()
         fields.append(QgsField(self.FIELD_TITLE, QVariant.String))
         fields.append(QgsField(self.FIELD_REGION, QVariant.String))
@@ -134,21 +87,16 @@ class PlacesFunctions:
         layer.updateFields()
 
     def add_features(self, layer: QgsVectorLayer, data: dict) -> None:
-        """
-        Adds features to the given layer based on search results.
-
-        Args:
-            layer (QgsVectorLayer): The layer to which features are added.
-            data (Dict): The search results containing place information.
-        """
+        """Adds drawable results, ignoring items without a position."""
         features = []
         for result in data.get("ResultItems", []):
+            position = result.get("Position")
+            if not position:
+                continue
             address = result.get("Address", {})
             feature = QgsFeature(layer.fields())
             feature.setGeometry(
-                QgsGeometry.fromPointXY(
-                    QgsPointXY(result["Position"][0], result["Position"][1])
-                )
+                QgsGeometry.fromPointXY(QgsPointXY(position[0], position[1]))
             )
             feature.setAttributes(
                 [
@@ -162,12 +110,7 @@ class PlacesFunctions:
         layer.dataProvider().addFeatures(features)
 
     def apply_layer_style(self, layer: QgsVectorLayer) -> None:
-        """
-        Sets up styling for the given layer.
-
-        Args:
-            layer (QgsVectorLayer): The layer to set up styling for.
-        """
+        """Applies the point symbol to the layer."""
         symbol_layer = QgsSimpleMarkerSymbolLayer()
         symbol_layer.setShape(self.SYMBOL_SHAPE)
         symbol_layer.setColor(self.SYMBOL_COLOR)
@@ -177,12 +120,7 @@ class PlacesFunctions:
         layer.setRenderer(QgsSingleSymbolRenderer(symbol))
 
     def apply_label_style(self, layer: QgsVectorLayer) -> None:
-        """
-        Sets up labeling for the given layer.
-
-        Args:
-            layer (QgsVectorLayer): The layer to set up labeling for.
-        """
+        """Applies title labeling to the layer."""
         label_settings = QgsPalLayerSettings()
         label_settings.fieldName = self.FIELD_TITLE
         label_settings.enabled = True

@@ -1,76 +1,52 @@
-"""
-Test Suite.
-"""
+"""QGIS test-runner entry points."""
 
+import importlib
 import os
 import sys
-import tempfile
 import unittest
 
-from osgeo import gdal
-from qgis.core import Qgis
 
-try:
-    from pip import main as pipmain
-except ImportError:
-    from pip._internal import main as pipmain
-
-try:
-    import coverage
-except ImportError:
-    pipmain(["install", "coverage"])
-    import coverage
+def _discover(package):
+    """Discovers tests using fully qualified module names."""
+    module = importlib.import_module(package)
+    start_dir = os.path.dirname(os.path.abspath(module.__file__))
+    return unittest.defaultTestLoader.discover(
+        start_dir, top_level_dir=os.path.dirname(start_dir)
+    )
 
 
-def _run_tests(test_suite, package_name, with_coverage=False):
-    """Core function to test a test suite."""
+def _run_tests(test_suite, package_name):
+    """Runs a test suite and exits if it is empty or unsuccessful."""
+    # Import lazily because unittest discovers this module outside QGIS.
+    from osgeo import gdal
+    from qgis.core import Qgis
+
     count = test_suite.countTestCases()
     print("########")
-    print(f"{count} tests has been discovered in {package_name}")
+    print(f"Discovered {count} tests in {package_name}")
     print(f"Python GDAL : {gdal.VersionInfo('VERSION_NUM')}")
     print(f"QGIS version : {Qgis.version()}")
     print("########")
-    if with_coverage:
-        cov = coverage.Coverage(
-            source=["location_service"],
-            omit=["*/test/*"],
-        )
-        cov.start()
+    if count == 0:
+        # qgis_testrunner.sh detects failure by grepping for "FAILED".
+        print(f"FAILED: no tests were discovered in {package_name}")
+        sys.exit(1)
 
-    unittest.TextTestRunner(verbosity=3, stream=sys.stdout).run(test_suite)
+    result = unittest.TextTestRunner(verbosity=3, stream=sys.stdout).run(test_suite)
 
-    if with_coverage:
-        cov.stop()
-        cov.save()
-
-        with tempfile.NamedTemporaryFile(delete=False) as report:
-            cov.report(file=report)
-            report.close()
-
-            with open(report.name, encoding="utf8") as fin:
-                print(fin.read())
+    if not result.wasSuccessful():
+        sys.exit(1)
 
 
 def test_package(package="location_service"):  # noqa: PT028
-    """Test package.
-
-    :param package: The package to test.
-    :type package: str
-    """
-    test_loader = unittest.defaultTestLoader
-    try:
-        test_suite = test_loader.discover(package)
-    except ImportError:
-        test_suite = unittest.TestSuite()
-    _run_tests(test_suite, package)
+    """Runs tests for the requested package."""
+    _run_tests(_discover(package), package)
 
 
 def test_environment():
-    """Test package with an environment variable."""
+    """Runs tests for TESTING_PACKAGE, defaulting to location_service."""
     package = os.environ.get("TESTING_PACKAGE", "location_service")
-    test_loader = unittest.defaultTestLoader
-    test_suite = test_loader.discover(package)
-    _run_tests(test_suite, package)
+    _run_tests(_discover(package), package)
 
 
 if __name__ == "__main__":

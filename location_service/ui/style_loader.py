@@ -8,17 +8,13 @@ STYLE_PATH = os.path.join(_UI_DIR, "style.qss")
 CHECKMARK_PATH = os.path.join(_UI_DIR, "checkmark.svg").replace("\\", "/")
 
 
-def load_style(widget: QWidget) -> None:
-    """
-    Loads a QSS stylesheet and applies it to the specified widget.
-
-    Args:
-        widget: The target widget to apply the stylesheet to.
-    """
+def load_style(widget: QWidget, *additional_widgets: QWidget) -> None:
+    """Loads and applies the plugin QSS stylesheet to one or more widgets."""
     try:
         with open(STYLE_PATH, encoding="utf-8") as f:
             qss = f.read().replace("${CHECKMARK_PATH}", CHECKMARK_PATH)
-            widget.setStyleSheet(qss)
+            for target in (widget, *additional_widgets):
+                target.setStyleSheet(qss)
     except (OSError, UnicodeDecodeError) as e:
         QgsMessageLog.logMessage(
             f"Failed to load style: {e!r}",

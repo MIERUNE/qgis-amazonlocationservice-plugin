@@ -1,9 +1,10 @@
 [project]
 name = "qgis-amazonlocationservice-plugin"
-version = "4.2.1"
+version = "4.3.0"
 description = "QGIS Plugin for Amazon Location Service"
 readme = "README.md"
-requires-python = ">=3.10"
+# QGIS 3.34 LTR bundles Python 3.9.
+requires-python = ">=3.9"
 authors = [
     { name = "MIERUNE Inc.", email = "info@mierune.co.jp" }
 ]
@@ -37,4 +38,7 @@ select = [
     "SIM",
     "RUF",
 ]
-ignore = ["N802", "E501", "RUF001"]
+ignore = [
+    "N802",  # QGIS and Qt APIs require camelCase names.
+    "PT027",  # Tests use unittest assertions under the QGIS test runner.
+]

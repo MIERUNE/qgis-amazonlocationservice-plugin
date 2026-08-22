@@ -8,10 +8,7 @@ from ..utils.configuration_handler import ConfigurationHandler
 
 @dataclass
 class MapsOptions:
-    """
-    Holds the user-selected map style options that map to Amazon Location
-    Service Maps V2 style and tile parameters.
-    """
+    """User-selected Maps V2 style and tile options."""
 
     style: str
     color_scheme: str = "Light"
@@ -25,64 +22,22 @@ class MapsOptions:
 
 
 class MapsFunctions:
-    """
-    Manages the loading of XYZ tile (raster) layers into a QGIS project
-    based on configurations.
-    """
+    """Builds and adds Amazon Location XYZ layers."""
 
-    KEY_REGION = "region_value"
-    KEY_APIKEY = "apikey_value"  # pragma: allowlist secret
     BASE_URL = "https://als.dayjournal.dev"
 
     def __init__(self) -> None:
-        """
-        Initializes the MapsFunctions with a configuration handler.
-        """
+        """Initializes the configuration handler."""
         self.configuration_handler = ConfigurationHandler()
-
-    def get_configuration_settings(self) -> tuple[str, str]:
-        """
-        Fetches necessary configuration settings from the settings manager.
-
-        Returns:
-            tuple[str, str]: A tuple containing the region and API key.
-
-        Raises:
-            ValueError: If the region or API key is missing or empty.
-        """
-        region = self.configuration_handler.get_setting(self.KEY_REGION)
-        apikey = self.configuration_handler.get_setting(self.KEY_APIKEY)
-
-        if not region or not str(region).strip():
-            raise ValueError("Missing required configuration setting: region")
-        if not apikey or not str(apikey).strip():
-            raise ValueError("Missing required configuration setting: apikey")
-
-        return region, apikey
 
     def build_tile_url(self, region: str, apikey: str, options: MapsOptions) -> str:
         """
-        Builds the XYZ tile URL with selected style parameters.
+        Builds the proxy XYZ URL with QGIS z/x/y placeholders.
 
-        The Lambda wrapper translates the camelCase keys below to Amazon
-        Location Service Maps V2 GetStyleDescriptor parameters (kebab-case).
-
-        Amazon Location Service only accepts ``colorScheme`` for the ``Satellite`` style; the
-        other descriptor parameters (politicalView, terrain, contourDensity,
-        traffic, travelModes, buildings) are therefore omitted when
-        ``style == 'Satellite'``.
-
-        The ``language`` parameter is consumed by the proxy wrapper (not by AWS).
-        The wrapper rewrites the style descriptor's ``text-field`` expressions to
-        ``name:{language}`` before chiitiler renders the tile.
-
-        Args:
-            region (str): Amazon Location Service region value.
-            apikey (str): API key value.
-            options (MapsOptions): User-selected style options.
-
-        Returns:
-            str: The XYZ tile URL with z/x/y placeholders for QGIS.
+        The proxy maps camelCase style options to Maps V2 descriptor
+        parameters. It handles ``language`` by rewriting ``text-field``
+        expressions before chiitiler renders tiles. For ``Satellite``,
+        ``colorScheme`` is the only style option sent.
         """
         params: dict[str, str] = {
             "APIkey": apikey,
@@ -108,36 +63,18 @@ class MapsFunctions:
         return f"{self.BASE_URL}/{region}/{options.style}/{{z}}/{{x}}/{{y}}?{query}"
 
     def compose_layer_name(self, options: MapsOptions) -> str:
-        """
-        Composes the layer name shown in the QGIS layer panel.
-
-        Args:
-            options (MapsOptions): User-selected style options.
-
-        Returns:
-            str: A short layer name combining style and color scheme.
-        """
+        """Returns the short name shown in the layer panel."""
         return f"{options.style} {options.color_scheme}"
 
     def add_xyz_tile_layer(self, options: MapsOptions) -> None:
-        """
-        Adds an XYZ tile layer (raster tile) into the current QGIS project using
-        configuration settings.
-
-        Args:
-            options (MapsOptions): User-selected style options.
-        """
-        try:
-            region_value, apikey_value = self.get_configuration_settings()
-            tile_url = self.build_tile_url(region_value, apikey_value, options)
-            encoded_tile_url = quote(tile_url, safe=":/?{}=,%")
-            layer_url = f"type=xyz&url={encoded_tile_url}&zmin=0&zmax=18"
-            layer_name = self.compose_layer_name(options)
-            xyz_tile_layer = QgsRasterLayer(layer_url, layer_name, "wms")
-            if not xyz_tile_layer.isValid():
-                raise RuntimeError(f"Invalid XYZ tile layer for URL: {layer_url}")
-            QgsProject.instance().addMapLayer(xyz_tile_layer)
-        except KeyError as e:
-            raise KeyError(f"Missing configuration for {e!r}") from e
-        except Exception as e:
-            raise RuntimeError(f"Failed to add XYZ tile layer: {e!r}") from e
+        """Adds the selected XYZ tile layer to the current project."""
+        region_value, apikey_value = self.configuration_handler.get_credentials()
+        tile_url = self.build_tile_url(region_value, apikey_value, options)
+        encoded_tile_url = quote(tile_url, safe=":/?{}=,%")
+        layer_url = f"type=xyz&url={encoded_tile_url}&zmin=0&zmax=18"
+        layer_name = self.compose_layer_name(options)
+        xyz_tile_layer = QgsRasterLayer(layer_url, layer_name, "wms")
+        if not xyz_tile_layer.isValid():
+            # Avoid exposing layer_url because its query string contains the API key.
+            raise RuntimeError(f"Invalid XYZ tile layer (style: {layer_name})")
+        QgsProject.instance().addMapLayer(xyz_tile_layer)

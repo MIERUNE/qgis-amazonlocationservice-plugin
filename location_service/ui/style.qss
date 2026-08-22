@@ -110,13 +110,14 @@ QComboBox:disabled {
 }
 
 /* --- Scroll Area --- */
-QScrollArea {
-    background-color: transparent;
+QScrollArea#scrollArea {
+    background-color: #F5F7FA;
     border: none;
 }
 
-QScrollArea > QWidget > QWidget {
-    background-color: transparent;
+QWidget#qt_scrollarea_viewport,
+QWidget#scrollAreaContents {
+    background-color: #F5F7FA;
 }
 
 QScrollBar:vertical {
@@ -212,6 +213,28 @@ QPushButton#button_cancel:hover {
 
 QPushButton#button_cancel:pressed {
     background-color: #EAEDED;
+}
+
+/* --- Keyboard Focus --- */
+/* Keep the focus cue when a focused button is also hovered or pressed. */
+QPushButton:focus {
+    outline: none;
+    border: 2px solid #232F3E;
+}
+
+QPushButton#button_save:focus,
+QPushButton#button_add:focus,
+QPushButton#button_search:focus {
+    border: 2px solid #16191F;
+    padding: 6px 22px;
+}
+
+QPushButton#button_click:focus,
+QPushButton#st_button_click:focus,
+QPushButton#ed_button_click:focus,
+QPushButton#button_cancel:focus {
+    border: 2px solid #232F3E;
+    padding: 7px 23px;
 }
 
 /* --- Check Box --- */

@@ -12,15 +12,26 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
     steps:
       - uses: actions/checkout@v6
 
+      - name: Validate release tag
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?(\+[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+            printf 'Invalid release tag format: %s\n' "$RELEASE_TAG" >&2
+            exit 1
+          fi
+
       - name: Create Archive
         run: |
-          zip -r ${{ env.PLUGIN_NAME }}-${{ github.event.release.tag_name }}.zip ./${{ env.PLUGIN_NAME }}
+          archive_name="${PLUGIN_NAME}-${RELEASE_TAG}.zip"
+          zip -r "$archive_name" "./${PLUGIN_NAME}"
 
       - name: Upload release asset
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload ${{ github.event.release.tag_name }} ${{ env.PLUGIN_NAME }}-${{ github.event.release.tag_name }}.zip
+          archive_name="${PLUGIN_NAME}-${RELEASE_TAG}.zip"
+          gh release upload "$RELEASE_TAG" "$archive_name"

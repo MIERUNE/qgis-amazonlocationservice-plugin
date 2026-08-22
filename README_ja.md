@@ -13,9 +13,6 @@ QGISでAmazon Location Service v2の機能を利用するプラグインです�
 
 [Amazon Location Service Plugin](https://plugins.qgis.org/plugins/location_service)  
 
-## blog
-
-
 ## 利用方法
 
 ### Amazon Location ServiceのAPIキー作成
@@ -28,8 +25,8 @@ QGISでAmazon Location Service v2の機能を利用するプラグインです�
 
 ![plugin](img/plugin.png)
 
-1. 「プラグイン」→「プラグインを管理およびインストール」を選択
-2. 「Amazon Location Service」で検索
+1. `プラグイン` → `プラグインを管理およびインストール`を選択
+2. `Amazon Location Service`で検索
 
 プラグインは[zipファイル](https://github.com/MIERUNE/qgis-amazonlocationservice-plugin/releases)を読み込みでもインストール可能
 
@@ -37,73 +34,78 @@ QGISでAmazon Location Service v2の機能を利用するプラグインです�
 
 ![menu](img/menu.png)
 
-- Config: リージョン名とAPIキーを設定
-- Maps: 地図表示機能
-- Places: ジオコーディング機能
-- Routes: ルーティング機能
-- Terms: 利用規約ページを表示
+- `Config`: リージョン名とAPIキーを設定
+- `Maps`: 地図表示機能
+- `Places`: ジオコーディング機能
+- `Routes`: ルーティング機能
+- `Terms`: 利用規約ページを表示
 
 ### 設定
 
 ![config](img/config.png)
 
-1. 「Config」メニューをクリック
+1. `Config`メニューをクリック
 2. リージョン名とAPIキーを設定
-    - Region: ap-xxxxx
-    - API Key: v1.public.xxxxx
-3. 「Save」をクリック
+    - `Region`: `ap-northeast-1`のようなAWSリージョンコード
+    - `API Key`: `v1.public.xxxxx`
+3. `Save`をクリック
 
 ### Maps機能
 
 ![maps](img/maps.gif)
 
-1. 「Maps」メニューをクリック
-2. 「Style」を選択（Standard / Monochrome / Hybrid / Satellite）
-3. 「Color Scheme」を選択（Light / Dark）
+1. `Maps`メニューをクリック
+2. `Style`を選択（Standard / Monochrome / Hybrid / Satellite）
+3. `Color Scheme`を選択（Light / Dark）
 4. （任意）スタイル詳細オプションを設定
-    - Language: 地名ラベルの言語
-    - Political View: 国境表示の地政学的視点
-    - Terrain: 陰影起伏の重ね合わせ
-    - Contour Density: 等高線の密度（Low / Medium / High）
-    - Traffic: 交通情報（All / Congestion）
-    - Travel Modes: 交通手段（Transit / Truck）
-5. 「Add」をクリック
+    - `Language`: 地名ラベルの言語
+    - `Political View`: 国境表示の地政学的視点
+    - `Terrain`: 陰影起伏の重ね合わせ
+    - `Contour Density`: 等高線の密度（Low / Medium / High）
+    - `Traffic`: 交通情報（All / Congestion）
+    - `Travel Modes`: 交通手段（Transit / Truck）
+5. `Add`をクリック
 6. 背景地図がレイヤで表示
 
-※ 2026.05現在、Buildings3DとTerrain3Dは未対応
+#### APIキーの取り扱い
+
+- 地図タイルのリクエストはAWSへ直接送信されず、このプラグインの[プロキシ](https://als.dayjournal.dev)を経由します。各リクエストに設定したAPIキーが含まれます。
+- MapsレイヤのソースURIにはAPIキーが含まれます。QGISプロジェクトを保存すると、プロジェクトファイルにAPIキーが平文で保存されます。
+
+※ 2026.08現在、`Buildings3D`と`Terrain3D`は未対応
 
 ### Places機能
 
 ![places](img/places.gif)
 
-1. 「Places」メニューをクリック
-2. 「Select Function」を選択
-3. 「QueryText」にテキスト入力
-4. 「Get Location」をクリック
+1. `Places`メニューをクリック
+2. `Select Function`を選択
+3. `QueryText`にテキスト入力
+4. `Get Location`をクリック
 5. 検索したい位置をクリック
-6. 「Search」をクリック
+6. `Search`をクリック
 7. 検索結果がレイヤで表示
 
-※ 2025.01現在、SearchTextが利用可能
+※ 2025.01現在、`SearchText`が利用可能
 
 ### Routes機能
 
 ![routes](img/routes.gif)
 
-1. 「Routes」メニューをクリック
-2. 「Select Function」を選択
-3. 「Get Location(Starting Point)」をクリック
+1. `Routes`メニューをクリック
+2. `Select Function`を選択
+3. `Get Location(Starting Point)`をクリック
 4. 始点をクリック
-5. 「Get Location(End Point)」をクリック
+5. `Get Location(End Point)`をクリック
 6. 終点をクリック
-7. 「Search」をクリック
+7. `Search`をクリック
 8. 検索結果がレイヤで表示
 
-※ 2025.01現在、CalculateRoutesが利用可能
+※ 2025.01現在、`CalculateRoutes`が利用可能
 
 ### Terms機能
 
-1. 「Terms」メニューをクリック
+1. `Terms`メニューをクリック
 2. 利用規約ページがブラウザで表示
 
 ### 利用規約
@@ -122,7 +124,7 @@ b. 別の第三者プロバイダからのマップの上にHEREのルートを�
 ### 必要なツール
 
 - [uv](https://docs.astral.sh/uv/)
-- QGIS 3.x
+- QGIS 3.34以降（QGIS 4.xを含む）
 
 ### セットアップ
 
@@ -155,6 +157,8 @@ mklink /D "%APPDATA%\QGIS\QGIS3\profiles\default\python\plugins\location_service
 ```bash
 ln -s /path/to/location_service ~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/location_service
 ```
+
+QGIS 4を使用する場合は、プロファイルパスの`QGIS3`を`QGIS4`に置き換えてください。
 
 コードを編集した後、QGISでプラグインをリロードすると変更が反映されます。
 

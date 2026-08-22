@@ -1,6 +1,7 @@
 import os
-from typing import Callable, Optional
+from typing import Callable, ClassVar, Optional
 
+from qgis.gui import QgisInterface
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QWidget
@@ -10,39 +11,45 @@ from .ui.maps.maps import MapsUi
 from .ui.places.places import PlacesUi
 from .ui.routes.routes import RoutesUi
 from .ui.terms.terms import TermsUi
+from .utils.feedback import show_error
 
 try:
-    _WindowStaysOnTopHint = Qt.WindowStaysOnTopHint
+    _TOOL_WINDOW = Qt.Tool
 except AttributeError:
-    _WindowStaysOnTopHint = Qt.WindowType.WindowStaysOnTopHint
+    _TOOL_WINDOW = Qt.WindowType.Tool
 
 
 class LocationService:
-    """
-    Manages the Amazon Location Service interface within a QGIS environment.
-    """
+    """QGIS plugin entry point."""
 
     MAIN_NAME = "Amazon Location Service"
 
-    def __init__(self, iface) -> None:
-        """
-        Initializes the plugin interface, setting up UI components
-        and internal variables.
+    COMPONENT_HELP: ClassVar[dict[str, str]] = {
+        "config": "Set your AWS region and API key.",
+        "maps": "Add an Amazon Location basemap.",
+        "places": "Search for places by text and location.",
+        "routes": "Calculate a route between start and end points.",
+        "terms": "Open the AWS Service Terms page.",
+    }
 
-        Args:
-            iface (QgsInterface): Reference to the QGIS app interface.
-        """
+    def __init__(self, iface: QgisInterface) -> None:
+        """Initializes the toolbar and plugin dialogs."""
         self.iface = iface
         self.main_window = self.iface.mainWindow()
         self.plugin_directory = os.path.dirname(__file__)
         self.actions = []
         self.toolbar = self.iface.addToolBar(self.MAIN_NAME)
         self.toolbar.setObjectName(self.MAIN_NAME)
-        self.config = ConfigUi()
-        self.maps = MapsUi()
-        self.places = PlacesUi()
-        self.routes = RoutesUi()
+        self.config = ConfigUi(self.main_window)
+        self.maps = MapsUi(self.main_window)
+        self.places = PlacesUi(self.main_window)
+        self.routes = RoutesUi(self.main_window)
         self.terms = TermsUi()
+        # Point-picking dialogs stay above their parent QGIS window while the
+        # map canvas remains interactive. Unlike WindowStaysOnTopHint, Tool
+        # windows do not need to stay above unrelated applications.
+        self.places.setWindowFlag(_TOOL_WINDOW, True)
+        self.routes.setWindowFlag(_TOOL_WINDOW, True)
         for component in [self.config, self.maps, self.places, self.routes]:
             component.hide()
 
@@ -58,23 +65,7 @@ class LocationService:
         whats_this: Optional[str] = None,
         parent: Optional[QWidget] = None,
     ) -> QAction:
-        """
-        Adds an action to the plugin menu and toolbar.
-
-        Args:
-            icon_path (str): Path to the icon.
-            text (str): Display text.
-            callback (Callable): Function to call on trigger.
-            enabled_flag (bool): Is the action enabled by default.
-            add_to_menu (bool): Should the action be added to the menu.
-            add_to_toolbar (bool): Should the action be added to the toolbar.
-            status_tip (Optional[str]): Text for status bar on hover.
-            whats_this (Optional[str]): Longer description of the action.
-            parent (Optional[QWidget]): Parent widget.
-
-        Returns:
-            QAction: The created action.
-        """
+        """Creates an action and adds it to the requested QGIS locations."""
         icon = QIcon(icon_path)
         action = QAction(icon, text, parent)
         action.triggered.connect(callback)
@@ -91,60 +82,69 @@ class LocationService:
         return action
 
     def initGui(self) -> None:
-        """
-        Initializes the GUI components, adding actions to the interface.
-        """
-        components = ["config", "maps", "places", "routes", "terms"]
-        for component_name in components:
+        """Adds plugin actions to the QGIS menu and toolbar."""
+        for component_name, help_text in self.COMPONENT_HELP.items():
             icon_path = os.path.join(
                 self.plugin_directory, f"ui/{component_name}/{component_name}.png"
             )
-            self.add_action(
+            action = self.add_action(
                 icon_path=icon_path,
                 text=component_name.capitalize(),
                 callback=getattr(self, f"show_{component_name}"),
+                status_tip=help_text,
+                whats_this=help_text,
                 parent=self.main_window,
             )
+            action.setToolTip(f"{component_name.capitalize()} — {help_text}")
 
     def unload(self) -> None:
-        """
-        Cleans up the plugin interface by removing actions and toolbar.
-        """
+        """Removes plugin actions and destroys its dialogs and toolbar."""
         for action in self.actions:
             self.iface.removePluginMenu(self.MAIN_NAME, action)
-            self.iface.removeToolBarIcon(action)
+            self.toolbar.removeAction(action)
+            action.deleteLater()
+        self.actions.clear()
+        for dialog in (self.config, self.maps, self.places, self.routes):
+            dialog.close()
+            dialog.deleteLater()
+        self.main_window.removeToolBar(self.toolbar)
+        self.toolbar.deleteLater()
         del self.toolbar
+
+    @staticmethod
+    def _present(dialog) -> None:
+        """Shows and raises a reused dialog."""
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
 
     def show_config(self) -> None:
         """
-        Displays the configuration dialog window.
+        Reloads settings before showing a hidden configuration dialog.
+
+        Reading encrypted auth storage may prompt for the QGIS master password.
         """
-        self.config.setWindowFlags(_WindowStaysOnTopHint)  # type: ignore
-        self.config.show()
+        if not self.config.isVisible():
+            self.config.reload_settings()
+        self._present(self.config)
 
     def show_maps(self) -> None:
-        """
-        Displays the maps dialog window.
-        """
-        self.maps.setWindowFlags(_WindowStaysOnTopHint)  # type: ignore
-        self.maps.show()
+        """Displays the maps dialog."""
+        self._present(self.maps)
 
     def show_places(self) -> None:
-        """
-        Displays the places dialog window.
-        """
-        self.places.setWindowFlags(_WindowStaysOnTopHint)  # type: ignore
-        self.places.show()
+        """Displays the places dialog."""
+        self._present(self.places)
 
     def show_routes(self) -> None:
-        """
-        Displays the routes dialog window.
-        """
-        self.routes.setWindowFlags(_WindowStaysOnTopHint)  # type: ignore
-        self.routes.show()
+        """Displays the routes dialog."""
+        self._present(self.routes)
 
     def show_terms(self) -> None:
-        """
-        Opens the service terms URL in the default web browser.
-        """
-        self.terms.open_service_terms_url()
+        """Opens the AWS Service Terms page or reports an error."""
+        if not self.terms.open_service_terms_url():
+            show_error(
+                self.main_window,
+                "Error",
+                "Failed to open the AWS Service Terms page in the default browser.",
+            )

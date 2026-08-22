@@ -16,16 +16,19 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.9'
+          python-version: "3.9"
 
       - name: Install uv
-        run: pip install uv
+        run: python -m pip install uv
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --locked --python 3.9
+
+      - name: Compile with Python 3.9
+        run: python -m compileall -q location_service
 
       - name: Lint with ruff
-        run: uv run ruff check --output-format=github .
+        run: uv run --locked --python 3.9 ruff check --output-format=github .
 
       - name: Format with ruff
-        run: uv run ruff format . --check --diff
+        run: uv run --locked --python 3.9 ruff format . --check --diff
