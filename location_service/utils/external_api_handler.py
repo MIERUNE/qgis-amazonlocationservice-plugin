@@ -7,6 +7,8 @@ from qgis.core import QgsNetworkAccessManager
 from qgis.PyQt.QtCore import QEventLoop, QUrl
 from qgis.PyQt.QtNetwork import QNetworkReply, QNetworkRequest
 
+from .redaction import redact_secrets
+
 try:
     _ContentTypeHeader = QNetworkRequest.ContentTypeHeader
 except AttributeError:
@@ -19,64 +21,84 @@ except AttributeError:
 
 
 class ExternalApiHandler:
-    """
-    A utility class for handling external API requests using the QGIS network manager.
-    """
+    """Sends JSON requests through QGIS's network manager."""
 
     JSON_CONTENT_TYPE = "application/json"
     UTF8_ENCODING = "utf-8"
+    TIMEOUT_MS = 30000
 
     def __init__(self) -> None:
-        """
-        Initializes the network manager instance from QGIS core libraries.
-        """
+        """Initializes the QGIS network manager and reply state."""
         self.network_manager = QgsNetworkAccessManager.instance()
+        self._active_reply: QNetworkReply | None = None
 
-    def send_json_post_request(
-        self, url: str, data: dict[str, Any]
-    ) -> dict[str, Any] | None:
-        """
-        Sends a POST request to the specified URL with the provided data and
-        handles the network response.
+    def abort(self) -> None:
+        """Aborts the reply currently being awaited, if any."""
+        if self._active_reply is not None:
+            self._active_reply.abort()
 
-        Args:
-            url: The URL to which the POST request should be sent.
-            data: The data to be sent in the POST request, as a dictionary.
-
-        Returns:
-            A dictionary parsed from the JSON response of the server, or None
-            if an error occurs.
-        """
+    def _build_request(self, url: str) -> QNetworkRequest:
+        """Builds a request and sets a timeout when Qt supports it."""
         request = QNetworkRequest(QUrl(url))
+        if hasattr(request, "setTransferTimeout"):
+            request.setTransferTimeout(self.TIMEOUT_MS)
+        return request
+
+    def send_json_post_request(self, url: str, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Posts JSON and returns the decoded response.
+
+        Network failures raise a redacted ``RuntimeError``; serialization and
+        decoding errors propagate unchanged.
+        """
+        request = self._build_request(url)
         request.setHeader(_ContentTypeHeader, self.JSON_CONTENT_TYPE)
-        encoded_data = json.dumps(data).encode(self.UTF8_ENCODING)
-        event_loop = QEventLoop()
+        # Reject NaN and infinity instead of sending non-standard JSON literals.
+        encoded_data = json.dumps(data, allow_nan=False).encode(self.UTF8_ENCODING)
         reply = self.network_manager.post(request, encoded_data)
+        return self._execute_reply(reply)
+
+    def _execute_reply(self, reply: QNetworkReply) -> dict[str, Any]:
+        """Waits for a reply while exposing it to ``abort()``, then parses it."""
+        event_loop = QEventLoop()
         reply.finished.connect(event_loop.quit)
-        event_loop.exec()
+        self._active_reply = reply
+        try:
+            event_loop.exec()
+        finally:
+            self._active_reply = None
         return self.handle_network_reply(reply)
 
-    def handle_network_reply(self, reply: QNetworkReply) -> dict[str, Any] | None:
+    def handle_network_reply(self, reply: QNetworkReply) -> dict[str, Any]:
         """
-        Processes the network reply, checking for errors and decoding the JSON response.
+        Decodes a reply and schedules it for deletion.
 
-        Args:
-            reply: The network reply object.
-
-        Returns:
-            The decoded JSON object if no network errors occurred, or None if an error
-            is encountered.
-
-        Raises:
-            RuntimeError: If a network error occurs or the response cannot be decoded
-            as JSON.
+        Network failures raise a redacted ``RuntimeError``; malformed response
+        data propagates its decode error.
         """
         try:
             if reply.error() == _NoError:  # type: ignore
                 response_data = reply.readAll().data().decode(self.UTF8_ENCODING)
                 return json.loads(response_data)
             else:
+                # Redact credential-like query parameters in Qt and server messages.
+                detail = self._extract_error_detail(reply)
                 error_msg = f"Network error occurred: {reply.errorString()}"
-                raise RuntimeError(error_msg)
+                if detail:
+                    error_msg = f"{error_msg} ({detail})"
+                raise RuntimeError(redact_secrets(error_msg))
         finally:
             reply.deleteLater()
+
+    def _extract_error_detail(self, reply: QNetworkReply) -> str:
+        """Returns the message from an Amazon Location error body, if present."""
+        try:
+            body = reply.readAll().data().decode(self.UTF8_ENCODING)
+            if not body:
+                return ""
+            parsed = json.loads(body)
+            if isinstance(parsed, dict):
+                return parsed.get("message") or parsed.get("Message") or ""
+        except (ValueError, UnicodeDecodeError):
+            return ""
+        return ""

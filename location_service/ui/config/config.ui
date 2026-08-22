@@ -57,7 +57,18 @@
        <widget class="QLineEdit" name="region_lineEdit"/>
       </item>
       <item row="2" column="1">
-       <widget class="QLineEdit" name="apikey_lineEdit"/>
+       <widget class="QLineEdit" name="apikey_lineEdit">
+        <property name="echoMode">
+         <enum>QLineEdit::Password</enum>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="QCheckBox" name="apikey_show_checkBox">
+        <property name="text">
+         <string>Show API key</string>
+        </property>
+       </widget>
       </item>
      </layout>
     </widget>
