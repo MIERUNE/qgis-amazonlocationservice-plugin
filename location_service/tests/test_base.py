@@ -1,15 +1,43 @@
 import unittest
+from unittest.mock import patch
 
 from location_service.tests import HAS_QGIS
 
 if HAS_QGIS:
     from qgis.core import QgsCoordinateReferenceSystem, QgsPointXY, QgsProject
+    from qgis.gui import QgsMapCanvas, QgsMapToolPan
+    from qgis.PyQt.QtCore import QPoint
+    from qgis.PyQt.QtWidgets import QLineEdit
 
-    from location_service.utils.click_handler import parse_lonlat, transform_to_wgs84
+    from location_service.utils import click_handler
+    from location_service.utils.click_handler import (
+        MapClickCoordinateUpdater,
+        parse_lonlat,
+        transform_to_wgs84,
+    )
     from location_service.utils.configuration_handler import (
         ConfigurationError,
         ConfigurationHandler,
     )
+
+    class _ReleaseEvent:
+        """Minimal mouse-release event shared by the PyQt5 and PyQt6 tests."""
+
+        def __init__(self, button):
+            self._button = button
+
+        def button(self):
+            return self._button
+
+        @staticmethod
+        def pos():
+            return QPoint(0, 0)
+
+    class _FixedPointUpdater(MapClickCoordinateUpdater):
+        """Map picker returning a stable point independent of canvas dimensions."""
+
+        def toMapCoordinates(self, _position):
+            return QgsPointXY(10.0, 20.0)
 
 
 @unittest.skipUnless(HAS_QGIS, "QGIS runtime is required")
@@ -128,6 +156,65 @@ class TestCoordinateTransform(unittest.TestCase):
 
         assert abs(result.x() - 1.0) < 1e-6
         assert abs(result.y()) < 1e-6
+
+
+@unittest.skipUnless(HAS_QGIS, "QGIS runtime is required")
+class TestMapClickCoordinateUpdater(unittest.TestCase):
+    """The coordinate picker restores the map tool active before selection."""
+
+    def setUp(self):
+        self.canvas = QgsMapCanvas()
+        self.canvas.setDestinationCrs(QgsCoordinateReferenceSystem("EPSG:4326"))
+        self.original_tool = QgsMapToolPan(self.canvas)
+        self.canvas.setMapTool(self.original_tool)
+
+    def tearDown(self):
+        current_tool = self.canvas.mapTool()
+        if current_tool is not None:
+            self.canvas.unsetMapTool(current_tool)
+        self.canvas.deleteLater()
+
+    def test_left_click_writes_coordinates_and_restores_original_tool(self):
+        lon_edit = QLineEdit()
+        lat_edit = QLineEdit()
+        picker = _FixedPointUpdater(self.canvas, lon_edit, lat_edit)
+
+        picker.arm()
+        assert self.canvas.mapTool() is picker
+
+        result = QgsPointXY(139.7671, 35.6812)
+        with patch(
+            "location_service.utils.click_handler.transform_to_wgs84",
+            return_value=result,
+        ):
+            picker.canvasReleaseEvent(_ReleaseEvent(click_handler._LEFT_BUTTON))
+
+        assert float(lon_edit.text()) == result.x()
+        assert float(lat_edit.text()) == result.y()
+        assert self.canvas.mapTool() is self.original_tool
+
+    def test_replacing_picker_then_cancelling_restores_original_tool(self):
+        start_lon_edit = QLineEdit()
+        start_lat_edit = QLineEdit()
+        end_lon_edit = QLineEdit()
+        end_lat_edit = QLineEdit()
+        start_picker = MapClickCoordinateUpdater(
+            self.canvas, start_lon_edit, start_lat_edit
+        )
+        end_picker = MapClickCoordinateUpdater(self.canvas, end_lon_edit, end_lat_edit)
+
+        start_picker.arm()
+        assert self.canvas.mapTool() is start_picker
+        end_picker.arm()
+        assert self.canvas.mapTool() is end_picker
+
+        end_picker.canvasReleaseEvent(_ReleaseEvent(click_handler._RIGHT_BUTTON))
+
+        assert self.canvas.mapTool() is self.original_tool
+        assert start_lon_edit.text() == ""
+        assert start_lat_edit.text() == ""
+        assert end_lon_edit.text() == ""
+        assert end_lat_edit.text() == ""
 
 
 if __name__ == "__main__":
