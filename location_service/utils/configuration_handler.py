@@ -6,10 +6,7 @@ from typing import Any, ClassVar
 from qgis.core import QgsApplication
 from qgis.PyQt.QtCore import QSettings
 
-try:
-    _NO_SETTINGS_ERROR = QSettings.NoError
-except AttributeError:
-    _NO_SETTINGS_ERROR = QSettings.Status.NoError
+_NO_SETTINGS_ERROR = QSettings.Status.NoError
 
 REGION_FORMAT_HINT = "Expected an AWS region code such as 'ap-northeast-1'."
 APIKEY_LOCKED_HINT = (

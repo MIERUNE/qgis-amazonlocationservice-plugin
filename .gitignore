@@ -137,6 +137,9 @@ env.bak/
 venv.bak/
 .ruff_cache/
 
+# QGIS test/runtime artifacts
+/symbology-style.db
+
 # Spyder project settings
 .spyderproject
 .spyproject

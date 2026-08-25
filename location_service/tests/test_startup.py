@@ -7,26 +7,18 @@ qgis_iface = None
 if HAS_QGIS:
     from qgis.PyQt import sip
     from qgis.PyQt.QtCore import QEvent, Qt
+    from qgis.PyQt.QtGui import QPalette
     from qgis.PyQt.QtWidgets import QApplication, QToolBar
     from qgis.utils import iface as qgis_iface
 
     from location_service import classFactory
     from location_service.location_service import LocationService
 
-    try:
-        STAY_ON_TOP = Qt.WindowStaysOnTopHint
-    except AttributeError:
-        STAY_ON_TOP = Qt.WindowType.WindowStaysOnTopHint
-    try:
-        TOOL_WINDOW = Qt.Tool
-        WINDOW_TYPE_MASK = Qt.WindowType_Mask
-    except AttributeError:
-        TOOL_WINDOW = Qt.WindowType.Tool
-        WINDOW_TYPE_MASK = Qt.WindowType.WindowType_Mask
-    try:
-        DEFERRED_DELETE = QEvent.DeferredDelete
-    except AttributeError:
-        DEFERRED_DELETE = QEvent.Type.DeferredDelete
+    STAY_ON_TOP = Qt.WindowType.WindowStaysOnTopHint
+    TOOL_WINDOW = Qt.WindowType.Tool
+    WINDOW_TYPE_MASK = Qt.WindowType.WindowType_Mask
+    DEFERRED_DELETE = QEvent.Type.DeferredDelete
+    PALETTE_TEXT = QPalette.ColorRole.Text
 
 HAS_IFACE = qgis_iface is not None
 
@@ -117,6 +109,81 @@ class TestPluginStartup(unittest.TestCase):
             assert sip.isdeleted(toolbar)
             assert all(sip.isdeleted(action) for action in actions)
             assert len(self.location_service_toolbars()) == baseline
+
+    def test_saved_config_refreshes_open_places_region_capabilities(self):
+        plugin = classFactory(qgis_iface)
+        try:
+            plugin.show_places()
+            QApplication.processEvents()
+
+            with patch.object(
+                plugin.places, "_configured_region", return_value="ap-southeast-1"
+            ):
+                plugin.config.settings_saved.emit()
+            assert not plugin.places.button_enrich.isEnabled()
+
+            with patch.object(
+                plugin.places, "_configured_region", return_value="us-east-1"
+            ):
+                plugin.config.settings_saved.emit()
+            assert plugin.places.button_enrich.isEnabled()
+        finally:
+            plugin.unload()
+            self.process_deferred_deletes()
+
+    def test_places_footer_fits_at_minimum_width(self):
+        plugin = classFactory(qgis_iface)
+        try:
+            dialog = plugin.places
+            dialog.resize(dialog.minimumWidth(), dialog.height())
+            plugin.show_places()
+            QApplication.processEvents()
+
+            top_buttons = (dialog.button_enrich, dialog.button_load_more)
+            bottom_buttons = (dialog.button_search, dialog.button_cancel)
+            top_positions = [
+                button.mapTo(dialog, button.rect().topLeft()) for button in top_buttons
+            ]
+            bottom_positions = [
+                button.mapTo(dialog, button.rect().topLeft())
+                for button in bottom_buttons
+            ]
+
+            assert dialog.width() == dialog.minimumWidth() == 500
+            content_width = dialog.scrollArea.widget().width()
+            viewport_width = dialog.scrollArea.viewport().width()
+            assert content_width <= viewport_width, (
+                f"Places content is {content_width}px wide but its viewport is "
+                f"only {viewport_width}px wide."
+            )
+            top_bottom = max(
+                position.y() + button.height()
+                for position, button in zip(top_positions, top_buttons)
+            )
+            assert top_bottom <= min(position.y() for position in bottom_positions)
+            for button in (*top_buttons, *bottom_buttons):
+                position = button.mapTo(dialog, button.rect().topLeft())
+                assert position.x() >= 0
+                assert position.x() + button.width() <= dialog.width()
+                assert button.width() >= button.sizeHint().width()
+        finally:
+            plugin.unload()
+            self.process_deferred_deletes()
+
+    def test_places_language_popup_uses_dark_text(self):
+        plugin = classFactory(qgis_iface)
+        try:
+            plugin.show_places()
+            dialog = plugin.places
+            dialog.language_comboBox.showPopup()
+            QApplication.processEvents()
+
+            text_color = dialog.language_comboBox.view().palette().color(PALETTE_TEXT)
+            assert text_color.name().lower() == "#16191f"
+        finally:
+            plugin.places.language_comboBox.hidePopup()
+            plugin.unload()
+            self.process_deferred_deletes()
 
     def test_terms_browser_failure_shows_error(self):
         plugin = classFactory(qgis_iface)

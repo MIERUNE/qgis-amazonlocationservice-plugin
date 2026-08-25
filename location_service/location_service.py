@@ -13,10 +13,7 @@ from .ui.routes.routes import RoutesUi
 from .ui.terms.terms import TermsUi
 from .utils.feedback import show_error
 
-try:
-    _TOOL_WINDOW = Qt.Tool
-except AttributeError:
-    _TOOL_WINDOW = Qt.WindowType.Tool
+_TOOL_WINDOW = Qt.WindowType.Tool
 
 
 class LocationService:
@@ -27,7 +24,7 @@ class LocationService:
     COMPONENT_HELP: ClassVar[dict[str, str]] = {
         "config": "Set your AWS region and API key.",
         "maps": "Add an Amazon Location basemap.",
-        "places": "Search for places by text and location.",
+        "places": "Search, geocode, and reverse-geocode places.",
         "routes": "Calculate a route between start and end points.",
         "terms": "Open the AWS Service Terms page.",
     }
@@ -45,6 +42,7 @@ class LocationService:
         self.places = PlacesUi(self.main_window)
         self.routes = RoutesUi(self.main_window)
         self.terms = TermsUi()
+        self.config.settings_saved.connect(self._refresh_places_region_capabilities)
         # Point-picking dialogs stay above their parent QGIS window while the
         # map canvas remains interactive. Unlike WindowStaysOnTopHint, Tool
         # windows do not need to stay above unrelated applications.
@@ -135,6 +133,10 @@ class LocationService:
     def show_places(self) -> None:
         """Displays the places dialog."""
         self._present(self.places)
+
+    def _refresh_places_region_capabilities(self) -> None:
+        """Refreshes Places after region or API-key settings are saved."""
+        self.places.refresh_region_capabilities()
 
     def show_routes(self) -> None:
         """Displays the routes dialog."""

@@ -19,34 +19,14 @@ APIKEY_PLAINTEXT_HINT = (
     "so it was saved as plain text in your QGIS settings."
 )
 
-try:
-    _WAIT_CURSOR = Qt.WaitCursor
-except AttributeError:
-    _WAIT_CURSOR = Qt.CursorShape.WaitCursor
+_WAIT_CURSOR = Qt.CursorShape.WaitCursor
+_PLAIN_TEXT = Qt.TextFormat.PlainText
+_ICON_WARNING = QMessageBox.Icon.Warning
+_ICON_CRITICAL = QMessageBox.Icon.Critical
 
-try:
-    _PLAIN_TEXT = Qt.PlainText
-except AttributeError:
-    _PLAIN_TEXT = Qt.TextFormat.PlainText
-
-try:
-    _ICON_WARNING = QMessageBox.Warning
-    _ICON_CRITICAL = QMessageBox.Critical
-except AttributeError:
-    _ICON_WARNING = QMessageBox.Icon.Warning
-    _ICON_CRITICAL = QMessageBox.Icon.Critical
-
-
-def _message_level(name: str) -> Any:
-    """Resolves QGIS 3's unscoped and QGIS 4's scoped message enums."""
-    try:
-        return getattr(Qgis, name)
-    except AttributeError:
-        return getattr(Qgis.MessageLevel, name)
-
-
-SUCCESS = _message_level("Success")
-WARNING = _message_level("Warning")
+INFO = Qgis.MessageLevel.Info
+SUCCESS = Qgis.MessageLevel.Success
+WARNING = Qgis.MessageLevel.Warning
 
 
 @contextlib.contextmanager

@@ -36,7 +36,7 @@ Plugins can also be installed by loading a [zip file](https://github.com/MIERUNE
 
 - `Config`: Set each region name and API key
 - `Maps`: Map display function
-- `Places`: Geocoding function
+- `Places`: Search and geocoding functions
 - `Routes`: Routing function
 - `Terms`: Display Terms of Use page
 
@@ -69,24 +69,28 @@ Plugins can also be installed by loading a [zip file](https://github.com/MIERUNE
 
 #### API key handling
 
-- Map tile requests go through the plugin's [proxy](https://als.dayjournal.dev) rather than directly to AWS. Each request includes the configured API key.
+- Map tile requests go through the plugin's proxy rather than directly to AWS. Each request includes the configured API key.
 - The Maps layer source URI contains the API key. Saving the QGIS project stores the key as plain text in the project file.
 
 ※ As of August 2026, `Buildings3D` and `Terrain3D` are not supported.
 
 ### Places Function
 
-![places](img/places.gif)
-
 1. Click the `Places` menu
-2. Select `Select Function`
-3. Enter text in `QueryText`
-4. Click `Get Location`
-5. Click on the location you wish to search
-6. Click `Search`
-7. Search results are displayed in layers
+2. Choose a function in `Select Function`
+3. Fill in the parameters of the selected function
+4. (Optional or required) Click `Get Location` and click a point on the map
+5. Click the search button
+6. Search results are added as a point layer, and the dialog stays open so you can run another search
 
-※ As of January 2025, only `SearchText` is available.
+Available functions:
+
+- `SearchText`: Searches for places by free text. A bias position is required. It also supports a `Countries` filter and `Travel Mode` (Car / Scooter / Truck).
+- `Geocode`: Converts an address into coordinates. Optional bias position, `Countries` filter, `Address Names` mode, and `Postal Code Mode`.
+- `ReverseGeocode`: Converts a clicked position into the nearest address(es). Requires a position; optional `QueryRadius` in meters (0 = unset).
+- `SearchNearby`: Searches for points of interest around a clicked position. Requires a position and a `QueryRadius` in meters.
+
+※ As of August 2026, `Suggest` and `Autocomplete` are not supported.
 
 ### Routes Function
 

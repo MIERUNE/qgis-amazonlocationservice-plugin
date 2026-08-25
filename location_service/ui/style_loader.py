@@ -19,5 +19,5 @@ def load_style(widget: QWidget, *additional_widgets: QWidget) -> None:
         QgsMessageLog.logMessage(
             f"Failed to load style: {e!r}",
             "Amazon Location Service",
-            Qgis.Warning,
+            Qgis.MessageLevel.Warning,
         )

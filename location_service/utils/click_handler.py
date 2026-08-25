@@ -13,12 +13,8 @@ from qgis.PyQt import sip
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import QLineEdit
 
-try:
-    _LEFT_BUTTON = Qt.LeftButton
-    _RIGHT_BUTTON = Qt.RightButton
-except AttributeError:
-    _LEFT_BUTTON = Qt.MouseButton.LeftButton
-    _RIGHT_BUTTON = Qt.MouseButton.RightButton
+_LEFT_BUTTON = Qt.MouseButton.LeftButton
+_RIGHT_BUTTON = Qt.MouseButton.RightButton
 
 WGS84_CRS = "EPSG:4326"
 

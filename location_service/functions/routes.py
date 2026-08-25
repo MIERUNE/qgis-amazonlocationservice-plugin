@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any
 from urllib.parse import quote
 
@@ -51,10 +53,17 @@ class RoutesFunctions:
         self.api_handler = ExternalApiHandler()
 
     def calculate_routes(
-        self, st_lon: float, st_lat: float, ed_lon: float, ed_lat: float
+        self,
+        st_lon: float,
+        st_lat: float,
+        ed_lon: float,
+        ed_lat: float,
+        credentials: tuple[str, str] | None = None,
     ) -> dict[str, Any]:
         """Calculates routes between the supplied WGS84 coordinates."""
-        region, apikey = self.configuration_handler.get_credentials()
+        if credentials is None:
+            credentials = self.configuration_handler.get_credentials()
+        region, apikey = credentials
         routes_url = (
             f"https://routes.geo.{region}.amazonaws.com/v2/routes"
             f"?key={quote(apikey, safe='')}"

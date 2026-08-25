@@ -36,7 +36,7 @@ QGISでAmazon Location Service v2の機能を利用するプラグインです�
 
 - `Config`: リージョン名とAPIキーを設定
 - `Maps`: 地図表示機能
-- `Places`: ジオコーディング機能
+- `Places`: 検索・ジオコーディング機能
 - `Routes`: ルーティング機能
 - `Terms`: 利用規約ページを表示
 
@@ -69,24 +69,28 @@ QGISでAmazon Location Service v2の機能を利用するプラグインです�
 
 #### APIキーの取り扱い
 
-- 地図タイルのリクエストはAWSへ直接送信されず、このプラグインの[プロキシ](https://als.dayjournal.dev)を経由します。各リクエストに設定したAPIキーが含まれます。
+- 地図タイルのリクエストはAWSへ直接送信されず、このプラグインのプロキシを経由します。各リクエストに設定したAPIキーが含まれます。
 - MapsレイヤのソースURIにはAPIキーが含まれます。QGISプロジェクトを保存すると、プロジェクトファイルにAPIキーが平文で保存されます。
 
 ※ 2026.08現在、`Buildings3D`と`Terrain3D`は未対応
 
 ### Places機能
 
-![places](img/places.gif)
-
 1. `Places`メニューをクリック
-2. `Select Function`を選択
-3. `QueryText`にテキスト入力
-4. `Get Location`をクリック
-5. 検索したい位置をクリック
-6. `Search`をクリック
-7. 検索結果がレイヤで表示
+2. `Select Function`で機能を選択
+3. 選択した機能のパラメータを入力
+4. （任意または必須）`Get Location`をクリックし、地図上の位置をクリック
+5. 検索ボタンをクリック
+6. 検索結果がポイントレイヤで追加され、ダイアログは開いたまま続けて検索可能
 
-※ 2025.01現在、`SearchText`が利用可能
+利用できる機能:
+
+- `SearchText`: フリーテキストで場所を検索。バイアス位置は必須。`Countries`フィルタと`Travel Mode`（Car / Scooter / Truck）に対応。
+- `Geocode`: 住所を座標に変換。バイアス位置（任意）、`Countries`フィルタ、`Address Names`モード、`Postal Code Mode`に対応。
+- `ReverseGeocode`: クリックした位置を最寄りの住所に変換。位置は必須。`QueryRadius`（メートル、0 = 未指定）は任意。
+- `SearchNearby`: クリックした位置の周辺スポットを検索。位置と`QueryRadius`（メートル）が必須。
+
+※ 2026.08現在、`Suggest`と`Autocomplete`は未対応
 
 ### Routes機能
 

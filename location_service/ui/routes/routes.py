@@ -51,8 +51,11 @@ class RoutesUi(QDialog):
         self._cancelled = False
         try:
             with busy_operation(self.button_search, "Calculating…"):
+                credentials = self.routes.configuration_handler.get_credentials()
+                if self._cancelled:
+                    return
                 result = self.routes.calculate_routes(
-                    start[0], start[1], end[0], end[1]
+                    start[0], start[1], end[0], end[1], credentials=credentials
                 )
             if self._cancelled:
                 return

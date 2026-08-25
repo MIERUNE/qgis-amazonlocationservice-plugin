@@ -2,6 +2,7 @@ import os
 from typing import Optional
 
 from qgis.PyQt import uic
+from qgis.PyQt.QtCore import pyqtSignal
 from qgis.PyQt.QtWidgets import QDialog, QLineEdit, QWidget
 
 from ...utils.configuration_handler import (
@@ -18,16 +19,14 @@ from ...utils.feedback import (
 )
 from ..style_loader import load_style
 
-try:
-    _NORMAL_ECHO = QLineEdit.Normal
-    _PASSWORD_ECHO = QLineEdit.Password
-except AttributeError:
-    _NORMAL_ECHO = QLineEdit.EchoMode.Normal
-    _PASSWORD_ECHO = QLineEdit.EchoMode.Password
+_NORMAL_ECHO = QLineEdit.EchoMode.Normal
+_PASSWORD_ECHO = QLineEdit.EchoMode.Password
 
 
 class ConfigUi(QDialog):
     """Amazon Location Service configuration dialog."""
+
+    settings_saved = pyqtSignal()
 
     UI_PATH = os.path.join(os.path.dirname(__file__), "config.ui")
     KEY_REGION = ConfigurationHandler.KEY_REGION
@@ -116,6 +115,7 @@ class ConfigUi(QDialog):
             show_error(self, "Error", message)
             return
         self._report_save_result(apikey, save_apikey, stored_as_plaintext)
+        self.settings_saved.emit()
         self.close()
 
     def _report_save_result(
