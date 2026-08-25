@@ -14,6 +14,7 @@ from ...utils.feedback import (
     show_config_error,
     show_error,
 )
+from ...utils.localization_preferences import LocalizationPreferences
 from ..style_loader import load_style
 from .constants import (
     COLOR_SCHEMES,
@@ -44,7 +45,13 @@ class MapsUi(QDialog):
         self.button_cancel.clicked.connect(self._cancel)
         self.style_comboBox.currentTextChanged.connect(self._on_style_changed)
         self.maps = MapsFunctions()
+        self.localization_preferences = LocalizationPreferences()
+        self._last_language = "Default"
+        self._last_political_view = ""
+        self._language_uses_default_fallback = False
+        self.language_comboBox.activated.connect(self._on_language_selected)
         self._populate_maps_options()
+        self._restore_localization_preferences()
         self._on_style_changed(self.style_comboBox.currentText())
 
     def _apply_style(self) -> None:
@@ -65,6 +72,10 @@ class MapsUi(QDialog):
         """Reapplies the Maps theme after QGIS finishes polishing the window."""
         super().showEvent(event)
         self._apply_style()
+        if event.spontaneous():
+            return
+        self._restore_localization_preferences()
+        self._on_style_changed(self.style_comboBox.currentText())
 
     def _populate_maps_options(self) -> None:
         """Populates map options other than terrain, which depends on the style."""
@@ -80,6 +91,47 @@ class MapsUi(QDialog):
             self.contour_density_comboBox.addItem(label, code)
         for label, code in TRAFFIC_MODES:
             self.traffic_comboBox.addItem(label, code)
+
+    def _restore_localization_preferences(self) -> None:
+        """Restores the language and political view last used by either dialog."""
+        language, political_view = self.localization_preferences.load()
+
+        language_text = language or "Default"
+        language_index = self.language_comboBox.findText(language_text)
+        self._language_uses_default_fallback = bool(language) and language_index < 0
+        if language_index < 0:
+            language_index = self.language_comboBox.findText("Default")
+        self.language_comboBox.setCurrentIndex(max(language_index, 0))
+
+        political_index = self.political_view_comboBox.findData(political_view)
+        self.political_view_comboBox.setCurrentIndex(max(political_index, 0))
+        self._last_language = self.language_comboBox.currentText()
+        self._last_political_view = self.political_view_comboBox.currentData() or ""
+
+    def _on_language_selected(self, _index: int) -> None:
+        """Marks the displayed language as an explicit user selection."""
+        self._language_uses_default_fallback = False
+
+    def _remember_localization_selection(self) -> None:
+        """Remembers localization values before a style disables their controls."""
+        if self.language_comboBox.isEnabled() and self.language_comboBox.count():
+            self._last_language = self.language_comboBox.currentText()
+        if (
+            self.political_view_comboBox.isEnabled()
+            and self.political_view_comboBox.count()
+        ):
+            self._last_political_view = self.political_view_comboBox.currentData() or ""
+
+    def _restore_localization_selection(self) -> None:
+        """Restores remembered values when the selected style supports them."""
+        if self.language_comboBox.isEnabled():
+            language_index = self.language_comboBox.findText(self._last_language)
+            self.language_comboBox.setCurrentIndex(max(language_index, 0))
+        if self.political_view_comboBox.isEnabled():
+            political_index = self.political_view_comboBox.findData(
+                self._last_political_view
+            )
+            self.political_view_comboBox.setCurrentIndex(max(political_index, 0))
 
     def _set_terrain_items(self, items: tuple[tuple[str, str], ...]) -> None:
         """Replaces terrain options, keeping the current value when possible."""
@@ -121,6 +173,7 @@ class MapsUi(QDialog):
 
     def _on_style_changed(self, style: str) -> None:
         """Updates controls for the selected style and renderer capabilities."""
+        self._remember_localization_selection()
         constraints = (
             (self.colorscheme_comboBox, "colorScheme"),
             (self.language_comboBox, "language"),
@@ -130,6 +183,7 @@ class MapsUi(QDialog):
         )
         for combo, feature in constraints:
             self._apply_combobox_constraint(combo, style, feature)
+        self._restore_localization_selection()
 
         travel_modes_enabled = self._is_feature_active(style, "travelModes")
         self.transit_checkBox.setEnabled(travel_modes_enabled)
@@ -167,6 +221,11 @@ class MapsUi(QDialog):
     def _add(self) -> None:
         """Adds the selected basemap to the project."""
         try:
+            save_language = self.language_comboBox.isEnabled() and not (
+                self._language_uses_default_fallback
+                and self.language_comboBox.currentText() == "Default"
+            )
+            save_political_view = self.political_view_comboBox.isEnabled()
             options = MapsOptions(
                 style=self.style_comboBox.currentText(),
                 color_scheme=self.colorscheme_comboBox.currentText(),
@@ -180,6 +239,12 @@ class MapsUi(QDialog):
             )
             with busy_operation(self.button_add, "Adding…"):
                 self.maps.add_xyz_tile_layer(options)
+            language, political_view = self.localization_preferences.load()
+            if save_language:
+                language = "" if options.language == "Default" else options.language
+            if save_political_view:
+                political_view = options.political_view
+            self.localization_preferences.save(language, political_view)
             push_message(
                 SUCCESS,
                 f"Added the “{options.style} {options.color_scheme}” basemap.",

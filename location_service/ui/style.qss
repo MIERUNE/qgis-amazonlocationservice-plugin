@@ -98,6 +98,7 @@ QComboBox::drop-down {
 QComboBox QAbstractItemView {
     border: 1px solid #D5DBDB;
     background-color: #FFFFFF;
+    color: #16191F;
     selection-background-color: #FF9900;
     selection-color: #16191F;
     padding: 4px;
@@ -107,6 +108,64 @@ QComboBox:disabled {
     background-color: #F2F3F3;
     color: #687078;
     border: 1px solid #D5DBDB;
+}
+
+/* --- Spin Box --- */
+QSpinBox {
+    border: 1px solid #D5DBDB;
+    border-radius: 4px;
+    padding: 7px 10px;
+    background-color: #FFFFFF;
+    color: #16191F;
+    font-size: 13px;
+    min-height: 18px;
+}
+
+QSpinBox:focus {
+    border: 2px solid #FF9900;
+    padding: 6px 9px;
+}
+
+QSpinBox:disabled {
+    background-color: #F2F3F3;
+    color: #687078;
+    border: 1px solid #D5DBDB;
+}
+
+QSpinBox::up-button,
+QSpinBox::down-button {
+    subcontrol-origin: border;
+    width: 20px;
+    border-left: 1px solid #D5DBDB;
+    background-color: #FAFAFA;
+}
+
+QSpinBox::up-button {
+    subcontrol-position: top right;
+    border-top-right-radius: 4px;
+}
+
+QSpinBox::down-button {
+    subcontrol-position: bottom right;
+    border-bottom-right-radius: 4px;
+}
+
+/* Styling the stepper buttons suppresses the native arrows, so draw
+   replacements as CSS border triangles. */
+QSpinBox::up-arrow {
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 5px solid #545B64;
+}
+
+QSpinBox::down-arrow {
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid #545B64;
 }
 
 /* --- Scroll Area --- */
@@ -167,10 +226,13 @@ QPushButton#button_search:pressed {
     background-color: #D45B07;
 }
 
-/* --- Secondary Buttons (Get Location) --- */
+/* --- Secondary Buttons (Get Location, Update Details, Load More) --- */
 QPushButton#button_click,
 QPushButton#st_button_click,
-QPushButton#ed_button_click {
+QPushButton#ed_button_click,
+QPushButton#button_enrich,
+QPushButton#button_position_clear,
+QPushButton#button_load_more {
     background-color: #FFFFFF;
     color: #16191F;
     border: 1px solid #545B64;
@@ -183,15 +245,32 @@ QPushButton#ed_button_click {
 
 QPushButton#button_click:hover,
 QPushButton#st_button_click:hover,
-QPushButton#ed_button_click:hover {
+QPushButton#ed_button_click:hover,
+QPushButton#button_enrich:hover,
+QPushButton#button_position_clear:hover,
+QPushButton#button_load_more:hover {
     background-color: #FAFAFA;
     border: 1px solid #16191F;
 }
 
 QPushButton#button_click:pressed,
 QPushButton#st_button_click:pressed,
-QPushButton#ed_button_click:pressed {
+QPushButton#ed_button_click:pressed,
+QPushButton#button_enrich:pressed,
+QPushButton#button_position_clear:pressed,
+QPushButton#button_load_more:pressed {
     background-color: #EAEDED;
+}
+
+QPushButton#button_click:disabled,
+QPushButton#st_button_click:disabled,
+QPushButton#ed_button_click:disabled,
+QPushButton#button_enrich:disabled,
+QPushButton#button_position_clear:disabled,
+QPushButton#button_load_more:disabled {
+    background-color: #F2F3F3;
+    color: #687078;
+    border: 1px solid #D5DBDB;
 }
 
 /* --- Cancel Button --- */
@@ -232,6 +311,9 @@ QPushButton#button_search:focus {
 QPushButton#button_click:focus,
 QPushButton#st_button_click:focus,
 QPushButton#ed_button_click:focus,
+QPushButton#button_enrich:focus,
+QPushButton#button_position_clear:focus,
+QPushButton#button_load_more:focus,
 QPushButton#button_cancel:focus {
     border: 2px solid #232F3E;
     padding: 7px 23px;

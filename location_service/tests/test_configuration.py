@@ -19,12 +19,8 @@ if HAS_QGIS:
 
     APIKEY = ConfigurationHandler.KEY_APIKEY
     AUTH_NAME = ConfigurationHandler.AUTH_APIKEY_NAME
-    try:
-        SETTINGS_ACCESS_ERROR = QSettings.AccessError
-        SETTINGS_NO_ERROR = QSettings.NoError
-    except AttributeError:
-        SETTINGS_ACCESS_ERROR = QSettings.Status.AccessError
-        SETTINGS_NO_ERROR = QSettings.Status.NoError
+    SETTINGS_ACCESS_ERROR = QSettings.Status.AccessError
+    SETTINGS_NO_ERROR = QSettings.Status.NoError
 
 
 class FakeAuthManager:
@@ -462,6 +458,15 @@ class TestConfigSave(unittest.TestCase):
             call(config_module.WARNING, APIKEY_CLEANUP_WARNING, duration=8),
         ]
 
+    def test_successful_save_emits_settings_saved(self):
+        settings_saved = Mock()
+        self.dialog.settings_saved.connect(settings_saved)
+
+        with patch.object(config_module, "push_message"):
+            self.dialog._save()
+
+        settings_saved.assert_called_once_with()
+
     def test_auth_unavailable_clear_warns_without_reporting_success(self):
         self.dialog.apikey_lineEdit.clear()
         self.handler.save_apikey.return_value = False
@@ -486,6 +491,8 @@ class TestConfigSave(unittest.TestCase):
 
     def test_apikey_failure_does_not_save_region(self):
         self.handler.save_apikey.side_effect = ConfigurationError("auth failed")
+        settings_saved = Mock()
+        self.dialog.settings_saved.connect(settings_saved)
 
         with (
             patch.object(config_module, "show_error") as show_error,
@@ -494,6 +501,7 @@ class TestConfigSave(unittest.TestCase):
             self.dialog._save()
 
         self.handler.save_region.assert_not_called()
+        settings_saved.assert_not_called()
         push_message.assert_not_called()
         assert (
             "Some changes may already have been applied" in show_error.call_args.args[2]

@@ -23,6 +23,12 @@ jobs:
             printf 'Invalid release tag format: %s\n' "$RELEASE_TAG" >&2
             exit 1
           fi
+          plugin_version="$(sed -n 's/^version=//p' "$PLUGIN_NAME/metadata.txt")"
+          if [[ "$RELEASE_TAG" != "v$plugin_version" ]]; then
+            printf 'Release tag %s does not match plugin version %s\n' \
+              "$RELEASE_TAG" "$plugin_version" >&2
+            exit 1
+          fi
 
       - name: Create Archive
         run: |
