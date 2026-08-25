@@ -1,6 +1,7 @@
 import unittest
 from typing import ClassVar
 from unittest.mock import Mock, patch
+from urllib.parse import urlparse
 
 from location_service.tests import HAS_QGIS
 
@@ -722,7 +723,10 @@ class TestEnrichSelectedFeatures(unittest.TestCase):
         assert len(values) == 2
         assert credentials.calls == 1
         assert len(api.urls) == 2
-        assert all("places.geo.us-east-1.amazonaws.com" in url for url in api.urls)
+        assert all(
+            urlparse(url).hostname == "places.geo.us-east-1.amazonaws.com"
+            for url in api.urls
+        )
         assert all("key=v1.public.snapshot" in url for url in api.urls)
 
     def test_get_details_accepts_a_credentials_snapshot_from_the_caller(self):
@@ -746,7 +750,10 @@ class TestEnrichSelectedFeatures(unittest.TestCase):
             for call in places.api_handler.send_json_get_request.call_args_list
         ]
         assert len(urls) == 2
-        assert all("places.geo.us-west-2.amazonaws.com" in url for url in urls)
+        assert all(
+            urlparse(url).hostname == "places.geo.us-west-2.amazonaws.com"
+            for url in urls
+        )
 
     def test_rejects_missing_feature_before_apply(self):
         places, layer = self._selected_layer()

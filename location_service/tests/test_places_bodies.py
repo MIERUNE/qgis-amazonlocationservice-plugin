@@ -1,4 +1,5 @@
 import unittest
+from urllib.parse import urlparse
 
 from location_service.functions.places_requests import (
     build_geocode_body,
@@ -275,7 +276,8 @@ class TestBuildEndpoint(unittest.TestCase):
             credentials=("us-west-2", "a&b"),
         )
 
-        assert "places.geo.us-west-2.amazonaws.com" in places.api_handler.url
+        parsed = urlparse(places.api_handler.url)
+        assert parsed.hostname == "places.geo.us-west-2.amazonaws.com"
         assert places.api_handler.url.endswith("?key=a%26b")
 
 
