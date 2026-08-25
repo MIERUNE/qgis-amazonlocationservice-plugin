@@ -76,6 +76,8 @@ Plugins can also be installed by loading a [zip file](https://github.com/MIERUNE
 
 ### Places Function
 
+![places](img/places.gif)
+
 1. Click the `Places` menu
 2. Choose a function in `Select Function`
 3. Fill in the parameters of the selected function

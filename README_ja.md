@@ -76,6 +76,8 @@ QGISでAmazon Location Service v2の機能を利用するプラグインです�
 
 ### Places機能
 
+![places](img/places.gif)
+
 1. `Places`メニューをクリック
 2. `Select Function`で機能を選択
 3. 選択した機能のパラメータを入力
