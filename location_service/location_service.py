@@ -25,7 +25,7 @@ class LocationService:
         "config": "Set your AWS region and API key.",
         "maps": "Add an Amazon Location basemap.",
         "places": "Search, geocode, and reverse-geocode places.",
-        "routes": "Calculate a route between start and end points.",
+        "routes": "Routing, isolines, snap-to-roads, and a route matrix.",
         "terms": "Open the AWS Service Terms page.",
     }
 
@@ -42,7 +42,7 @@ class LocationService:
         self.places = PlacesUi(self.main_window)
         self.routes = RoutesUi(self.main_window)
         self.terms = TermsUi()
-        self.config.settings_saved.connect(self._refresh_places_region_capabilities)
+        self.config.settings_saved.connect(self._refresh_region_capabilities)
         # Point-picking dialogs stay above their parent QGIS window while the
         # map canvas remains interactive. Unlike WindowStaysOnTopHint, Tool
         # windows do not need to stay above unrelated applications.
@@ -134,9 +134,10 @@ class LocationService:
         """Displays the places dialog."""
         self._present(self.places)
 
-    def _refresh_places_region_capabilities(self) -> None:
-        """Refreshes Places after region or API-key settings are saved."""
+    def _refresh_region_capabilities(self) -> None:
+        """Refreshes Places and Routes after region or API-key settings are saved."""
         self.places.refresh_region_capabilities()
+        self.routes.refresh_region_capabilities()
 
     def show_routes(self) -> None:
         """Displays the routes dialog."""

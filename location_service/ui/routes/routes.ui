@@ -6,13 +6,13 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>356</width>
-    <height>424</height>
+    <width>500</width>
+    <height>680</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
-    <width>240</width>
+    <width>500</width>
     <height>0</height>
    </size>
   </property>
@@ -38,7 +38,7 @@
      <property name="title">
       <string/>
      </property>
-     <layout class="QGridLayout" name="gridLayout_4">
+     <layout class="QGridLayout" name="functionLayout">
       <item row="0" column="0">
        <widget class="QLabel" name="routes_label">
         <property name="text">
@@ -53,95 +53,955 @@
     </widget>
    </item>
    <item>
-    <widget class="QGroupBox" name="groupBox_2">
-     <property name="title">
-      <string>Starting Point</string>
+    <widget class="QScrollArea" name="scrollArea">
+     <property name="widgetResizable">
+      <bool>true</bool>
      </property>
-     <layout class="QGridLayout" name="gridLayout_3">
-      <item row="0" column="0">
-       <widget class="QLabel" name="st_lon_label">
-        <property name="text">
-         <string>Longitude</string>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="1">
-       <widget class="QPushButton" name="st_button_click">
-        <property name="text">
-         <string>Get Location</string>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="1">
-       <widget class="QLineEdit" name="st_lat_lineEdit">
-        <property name="enabled">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="1">
-       <widget class="QLineEdit" name="st_lon_lineEdit">
-        <property name="enabled">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="1" column="0">
-       <widget class="QLabel" name="st_lat_label">
-        <property name="text">
-         <string>Latitude</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
+     <property name="horizontalScrollBarPolicy">
+      <enum>Qt::ScrollBarAlwaysOff</enum>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <widget class="QWidget" name="scrollAreaContents">
+      <layout class="QVBoxLayout" name="scrollLayout">
+       <item>
+        <widget class="QStackedWidget" name="params_stackedWidget">
+         <widget class="QWidget" name="page_calculate_routes">
+          <layout class="QVBoxLayout" name="calculateRoutesLayout">
+           <item>
+            <widget class="QGroupBox" name="st_groupBox">
+             <property name="title">
+              <string>Starting Point</string>
+             </property>
+             <layout class="QGridLayout" name="stLayout">
+              <item row="0" column="0">
+               <widget class="QLabel" name="st_lon_label">
+                <property name="text">
+                 <string>Longitude</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QLineEdit" name="st_lon_lineEdit">
+                <property name="enabled">
+                 <bool>false</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="st_lat_label">
+                <property name="text">
+                 <string>Latitude</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QLineEdit" name="st_lat_lineEdit">
+                <property name="enabled">
+                 <bool>false</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QPushButton" name="st_button_click">
+                <property name="text">
+                 <string>Get Location</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="ed_groupBox">
+             <property name="title">
+              <string>End Point</string>
+             </property>
+             <layout class="QGridLayout" name="edLayout">
+              <item row="0" column="0">
+               <widget class="QLabel" name="ed_lon_label">
+                <property name="text">
+                 <string>Longitude</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QLineEdit" name="ed_lon_lineEdit">
+                <property name="enabled">
+                 <bool>false</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="ed_lat_label">
+                <property name="text">
+                 <string>Latitude</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QLineEdit" name="ed_lat_lineEdit">
+                <property name="enabled">
+                 <bool>false</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QPushButton" name="ed_button_click">
+                <property name="text">
+                 <string>Get Location</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="wp_groupBox">
+             <property name="title">
+              <string>Waypoints (max 23)</string>
+             </property>
+             <layout class="QGridLayout" name="wpLayout">
+              <item row="0" column="0" colspan="3">
+               <widget class="QListWidget" name="waypoints_listWidget">
+                <property name="maximumSize">
+                 <size>
+                  <width>16777215</width>
+                  <height>90</height>
+                 </size>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QPushButton" name="wp_button_click">
+                <property name="text">
+                 <string>Add Points</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QPushButton" name="wp_button_undo">
+                <property name="text">
+                 <string>Undo</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="2">
+               <widget class="QPushButton" name="wp_button_clear">
+                <property name="text">
+                 <string>Clear</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="rt_options_groupBox">
+             <property name="title">
+              <string>Options</string>
+             </property>
+             <layout class="QGridLayout" name="rtOptionsLayout">
+              <item row="0" column="0">
+               <widget class="QLabel" name="travelmode_label">
+                <property name="text">
+                 <string>Travel Mode</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QComboBox" name="travelmode_comboBox"/>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="optimizefor_label">
+                <property name="text">
+                 <string>Optimize For</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QComboBox" name="optimizefor_comboBox"/>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="alternatives_label">
+                <property name="text">
+                 <string>Max Alternatives</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QSpinBox" name="alternatives_spinBox">
+                <property name="minimum">
+                 <number>0</number>
+                </property>
+                <property name="maximum">
+                 <number>5</number>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="0">
+               <widget class="QLabel" name="avoid_label">
+                <property name="text">
+                 <string>Avoid</string>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="1">
+               <layout class="QGridLayout" name="avoidLayout">
+                <item row="0" column="0">
+                 <widget class="QCheckBox" name="avoid_tollroads_checkBox">
+                  <property name="text">
+                   <string>Toll Roads</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="0" column="1">
+                 <widget class="QCheckBox" name="avoid_ferries_checkBox">
+                  <property name="text">
+                   <string>Ferries</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="0">
+                 <widget class="QCheckBox" name="avoid_tunnels_checkBox">
+                  <property name="text">
+                   <string>Tunnels</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="1">
+                 <widget class="QCheckBox" name="avoid_highways_checkBox">
+                  <property name="text">
+                   <string>Highways</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="2" column="0">
+                 <widget class="QCheckBox" name="avoid_dirtroads_checkBox">
+                  <property name="text">
+                   <string>Dirt Roads</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="2" column="1">
+                 <widget class="QCheckBox" name="avoid_uturns_checkBox">
+                  <property name="text">
+                   <string>U-Turns</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item row="4" column="0" colspan="2">
+               <widget class="QCheckBox" name="rt_summary_checkBox">
+                <property name="text">
+                 <string>Add route summary table</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="time_groupBox">
+             <property name="title">
+              <string>Time</string>
+             </property>
+             <layout class="QGridLayout" name="timeLayout">
+              <item row="0" column="0">
+               <widget class="QRadioButton" name="time_none_radioButton">
+                <property name="text">
+                 <string>Not specified</string>
+                </property>
+                <property name="checked">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QRadioButton" name="time_departnow_radioButton">
+                <property name="text">
+                 <string>Depart now</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QRadioButton" name="time_departure_radioButton">
+                <property name="text">
+                 <string>Departure time</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QRadioButton" name="time_arrival_radioButton">
+                <property name="text">
+                 <string>Arrival time</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0" colspan="2">
+               <widget class="QDateTimeEdit" name="time_dateTimeEdit">
+                <property name="enabled">
+                 <bool>false</bool>
+                </property>
+                <property name="displayFormat">
+                 <string>yyyy-MM-dd HH:mm</string>
+                </property>
+                <property name="calendarPopup">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="transit_groupBox">
+             <property name="title">
+              <string>Transit Modes</string>
+             </property>
+             <layout class="QGridLayout" name="transitLayout">
+              <item row="0" column="0" colspan="2">
+               <widget class="QComboBox" name="transit_filter_comboBox"/>
+              </item>
+              <item row="1" column="0" colspan="2">
+               <widget class="QListWidget" name="transit_modes_listWidget">
+                <property name="maximumSize">
+                 <size>
+                  <width>16777215</width>
+                  <height>110</height>
+                 </size>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+         <widget class="QWidget" name="page_calculate_isolines">
+          <layout class="QVBoxLayout" name="calculateIsolinesLayout">
+           <item>
+            <widget class="QGroupBox" name="iso_center_groupBox">
+             <property name="title">
+              <string>Center Point</string>
+             </property>
+             <layout class="QGridLayout" name="isoCenterLayout">
+              <item row="0" column="0">
+               <widget class="QLabel" name="iso_lon_label">
+                <property name="text">
+                 <string>Longitude</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QLineEdit" name="iso_lon_lineEdit">
+                <property name="enabled">
+                 <bool>false</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="iso_lat_label">
+                <property name="text">
+                 <string>Latitude</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QLineEdit" name="iso_lat_lineEdit">
+                <property name="enabled">
+                 <bool>false</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QPushButton" name="iso_button_click">
+                <property name="text">
+                 <string>Get Location</string>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="0">
+               <widget class="QLabel" name="iso_direction_label">
+                <property name="text">
+                 <string>Direction</string>
+                </property>
+               </widget>
+              </item>
+              <item row="3" column="1">
+               <widget class="QComboBox" name="iso_direction_comboBox"/>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="iso_threshold_groupBox">
+             <property name="title">
+              <string>Thresholds (max 5, one billed isoline each)</string>
+             </property>
+             <layout class="QGridLayout" name="isoThresholdLayout">
+              <item row="0" column="0">
+               <widget class="QLabel" name="iso_threshold_type_label">
+                <property name="text">
+                 <string>Type</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QComboBox" name="iso_threshold_type_comboBox"/>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="iso_thresholds_label">
+                <property name="text">
+                 <string>Values (minutes)</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QLineEdit" name="iso_thresholds_lineEdit">
+                <property name="placeholderText">
+                 <string>5, 10, 15</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="iso_options_groupBox">
+             <property name="title">
+              <string>Options</string>
+             </property>
+             <layout class="QGridLayout" name="isoOptionsLayout">
+              <item row="0" column="0">
+               <widget class="QLabel" name="iso_travelmode_label">
+                <property name="text">
+                 <string>Travel Mode</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QComboBox" name="iso_travelmode_comboBox"/>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <spacer name="iso_verticalSpacer">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+         <widget class="QWidget" name="page_snap_to_roads">
+          <layout class="QVBoxLayout" name="snapToRoadsLayout">
+           <item>
+            <widget class="QGroupBox" name="snap_input_groupBox">
+             <property name="title">
+              <string>GPS Trace Input</string>
+             </property>
+             <layout class="QGridLayout" name="snapInputLayout">
+              <item row="0" column="0">
+               <widget class="QLabel" name="snap_layer_label">
+                <property name="text">
+                 <string>Point Layer</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QWidget" name="snap_layer_container" native="true">
+                <layout class="QVBoxLayout" name="snapLayerContainerLayout">
+                 <property name="leftMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="topMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="rightMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="bottomMargin">
+                  <number>0</number>
+                 </property>
+                </layout>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="snap_id_label">
+                <property name="text">
+                 <string>ID Field</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QWidget" name="snap_id_container" native="true">
+                <layout class="QVBoxLayout" name="snapIdContainerLayout">
+                 <property name="leftMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="topMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="rightMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="bottomMargin">
+                  <number>0</number>
+                 </property>
+                </layout>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="snap_order_label">
+                <property name="text">
+                 <string>Order By</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QWidget" name="snap_order_container" native="true">
+                <layout class="QVBoxLayout" name="snapOrderContainerLayout">
+                 <property name="leftMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="topMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="rightMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="bottomMargin">
+                  <number>0</number>
+                 </property>
+                </layout>
+               </widget>
+              </item>
+              <item row="3" column="0" colspan="2">
+               <widget class="QCheckBox" name="snap_selected_checkBox">
+                <property name="text">
+                 <string>Selected features only</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="snap_fields_groupBox">
+             <property name="title">
+              <string>Optional Trace Fields</string>
+             </property>
+             <layout class="QGridLayout" name="snapFieldsLayout">
+              <item row="0" column="0">
+               <widget class="QLabel" name="snap_timestamp_label">
+                <property name="text">
+                 <string>Timestamp (ISO 8601)</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QWidget" name="snap_timestamp_container" native="true">
+                <layout class="QVBoxLayout" name="snapTimestampContainerLayout">
+                 <property name="leftMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="topMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="rightMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="bottomMargin">
+                  <number>0</number>
+                 </property>
+                </layout>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="snap_heading_label">
+                <property name="text">
+                 <string>Heading (deg)</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QWidget" name="snap_heading_container" native="true">
+                <layout class="QVBoxLayout" name="snapHeadingContainerLayout">
+                 <property name="leftMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="topMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="rightMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="bottomMargin">
+                  <number>0</number>
+                 </property>
+                </layout>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="snap_speed_label">
+                <property name="text">
+                 <string>Speed (km/h)</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QWidget" name="snap_speed_container" native="true">
+                <layout class="QVBoxLayout" name="snapSpeedContainerLayout">
+                 <property name="leftMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="topMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="rightMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="bottomMargin">
+                  <number>0</number>
+                 </property>
+                </layout>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="snap_options_groupBox">
+             <property name="title">
+              <string>Options</string>
+             </property>
+             <layout class="QGridLayout" name="snapOptionsLayout">
+              <item row="0" column="0">
+               <widget class="QLabel" name="snap_radius_label">
+                <property name="text">
+                 <string>Snap Radius (m)</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QSpinBox" name="snap_radius_spinBox">
+                <property name="minimum">
+                 <number>0</number>
+                </property>
+                <property name="maximum">
+                 <number>10000</number>
+                </property>
+                <property name="value">
+                 <number>300</number>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="snap_travelmode_label">
+                <property name="text">
+                 <string>Travel Mode</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QComboBox" name="snap_travelmode_comboBox"/>
+              </item>
+              <item row="2" column="0" colspan="2">
+               <widget class="QCheckBox" name="snap_confidence_checkBox">
+                <property name="text">
+                 <string>Output confidence points</string>
+                </property>
+                <property name="checked">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <spacer name="snap_verticalSpacer">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+         <widget class="QWidget" name="page_calculate_route_matrix">
+          <layout class="QVBoxLayout" name="calculateRouteMatrixLayout">
+           <item>
+            <widget class="QGroupBox" name="mx_origins_groupBox">
+             <property name="title">
+              <string>Origins</string>
+             </property>
+             <layout class="QGridLayout" name="mxOriginsLayout">
+              <item row="0" column="0">
+               <widget class="QLabel" name="mx_origins_label">
+                <property name="text">
+                 <string>Layer</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QWidget" name="mx_origins_container" native="true">
+                <layout class="QVBoxLayout" name="mxOriginsContainerLayout">
+                 <property name="leftMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="topMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="rightMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="bottomMargin">
+                  <number>0</number>
+                 </property>
+                </layout>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="mx_origins_id_label">
+                <property name="text">
+                 <string>ID Field</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QWidget" name="mx_origins_id_container" native="true">
+                <layout class="QVBoxLayout" name="mxOriginsIdContainerLayout">
+                 <property name="leftMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="topMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="rightMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="bottomMargin">
+                  <number>0</number>
+                 </property>
+                </layout>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="mx_origins_order_label">
+                <property name="text">
+                 <string>Order By</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QWidget" name="mx_origins_order_container" native="true">
+                <layout class="QVBoxLayout" name="mxOriginsOrderContainerLayout">
+                 <property name="leftMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="topMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="rightMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="bottomMargin">
+                  <number>0</number>
+                 </property>
+                </layout>
+               </widget>
+              </item>
+              <item row="3" column="0" colspan="2">
+               <widget class="QCheckBox" name="mx_origins_selected_checkBox">
+                <property name="text">
+                 <string>Selected features only</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="mx_dest_groupBox">
+             <property name="title">
+              <string>Destinations</string>
+             </property>
+             <layout class="QGridLayout" name="mxDestLayout">
+              <item row="0" column="0">
+               <widget class="QLabel" name="mx_dest_label">
+                <property name="text">
+                 <string>Layer</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QWidget" name="mx_dest_container" native="true">
+                <layout class="QVBoxLayout" name="mxDestContainerLayout">
+                 <property name="leftMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="topMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="rightMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="bottomMargin">
+                  <number>0</number>
+                 </property>
+                </layout>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="mx_dest_id_label">
+                <property name="text">
+                 <string>ID Field</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QWidget" name="mx_dest_id_container" native="true">
+                <layout class="QVBoxLayout" name="mxDestIdContainerLayout">
+                 <property name="leftMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="topMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="rightMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="bottomMargin">
+                  <number>0</number>
+                 </property>
+                </layout>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="mx_dest_order_label">
+                <property name="text">
+                 <string>Order By</string>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QWidget" name="mx_dest_order_container" native="true">
+                <layout class="QVBoxLayout" name="mxDestOrderContainerLayout">
+                 <property name="leftMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="topMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="rightMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="bottomMargin">
+                  <number>0</number>
+                 </property>
+                </layout>
+               </widget>
+              </item>
+              <item row="3" column="0" colspan="2">
+               <widget class="QCheckBox" name="mx_dest_selected_checkBox">
+                <property name="text">
+                 <string>Selected features only</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="mx_options_groupBox">
+             <property name="title">
+              <string>Options</string>
+             </property>
+             <layout class="QGridLayout" name="mxOptionsLayout">
+              <item row="0" column="0">
+               <widget class="QLabel" name="mx_travelmode_label">
+                <property name="text">
+                 <string>Travel Mode</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QComboBox" name="mx_travelmode_comboBox"/>
+              </item>
+              <item row="1" column="0" colspan="2">
+               <widget class="QCheckBox" name="mx_odlines_checkBox">
+                <property name="text">
+                 <string>Add OD straight lines (not road geometry)</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <spacer name="mx_verticalSpacer">
+             <property name="orientation">
+              <enum>Qt::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="attributions_groupBox">
+         <property name="title">
+          <string>Data Attributions</string>
+         </property>
+         <layout class="QVBoxLayout" name="attributionsLayout">
+          <item>
+           <widget class="QLabel" name="attributions_label">
+            <property name="text">
+             <string>No attributions to display yet.</string>
+            </property>
+            <property name="textFormat">
+             <enum>Qt::RichText</enum>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+            <property name="openExternalLinks">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+      </layout>
+     </widget>
     </widget>
    </item>
    <item>
-    <widget class="QGroupBox" name="groupBox_3">
-     <property name="title">
-      <string>End Point</string>
-     </property>
-     <layout class="QGridLayout" name="gridLayout">
-      <item row="2" column="0">
-       <widget class="QLabel" name="ed_lat_label">
-        <property name="text">
-         <string>Latitude</string>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="1">
-       <widget class="QLineEdit" name="ed_lon_lineEdit">
-        <property name="enabled">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="0" column="0">
-       <widget class="QLabel" name="ed_lon_label">
-        <property name="text">
-         <string>Longitude</string>
-        </property>
-       </widget>
-      </item>
-      <item row="2" column="1">
-       <widget class="QLineEdit" name="ed_lat_lineEdit">
-        <property name="enabled">
-         <bool>false</bool>
-        </property>
-       </widget>
-      </item>
-      <item row="3" column="1">
-       <widget class="QPushButton" name="ed_button_click">
-        <property name="text">
-         <string>Get Location</string>
-        </property>
-       </widget>
-      </item>
-     </layout>
-    </widget>
-   </item>
-   <item>
-    <layout class="QHBoxLayout" name="horizontalLayout">
+    <layout class="QHBoxLayout" name="primaryActionsLayout">
      <item>
       <spacer name="horizontalSpacer">
        <property name="orientation">
@@ -164,7 +1024,7 @@
         </sizepolicy>
        </property>
        <property name="text">
-        <string>Search</string>
+        <string>Get route</string>
        </property>
       </widget>
      </item>

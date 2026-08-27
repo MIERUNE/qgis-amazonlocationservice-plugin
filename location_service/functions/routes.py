@@ -1,56 +1,85 @@
 from __future__ import annotations
 
 from typing import Any
-from urllib.parse import quote
 
-from qgis.core import (
-    QgsFeature,
-    QgsField,
-    QgsFields,
-    QgsGeometry,
-    QgsPointXY,
-    QgsProject,
-    QgsSimpleLineSymbolLayer,
-    QgsSingleSymbolRenderer,
-    QgsSymbol,
-    QgsVectorLayer,
+from .base import ServiceFunctionsBase
+from .routes_capabilities import validate_region_options
+from .routes_requests import (
+    IsolineOptions,
+    MatrixOptions,
+    RouteOptions,
+    SnapOptions,
+    build_isolines_body,
+    build_matrix_body,
+    build_routes_body,
+    build_snap_body,
 )
-from qgis.PyQt.QtCore import QVariant
-from qgis.PyQt.QtGui import QColor
+from .routes_results import major_road_names
 
-from ..utils.configuration_handler import ConfigurationHandler
-from ..utils.external_api_handler import ExternalApiHandler
+__all__ = ["RoutesFunctions", "major_road_names"]
 
 
-def major_road_names(route: dict[str, Any]) -> str:
+class RoutesFunctions(ServiceFunctionsBase):
     """
-    Joins major-road labels, preferring ``RoadName`` over ``RouteNumber``.
+    Network facade for the Amazon Location Routes V2 operations.
 
-    Each nested value may be absent or null.
+    Request bodies are built and validated in ``routes_requests``, responses
+    are checked in ``routes_results``, and QGIS layers are built in
+    ``routes_layers``; this class only sends the requests.
     """
-    names = []
-    for label in route.get("MajorRoadLabels") or []:
-        label = label or {}
-        road_name = (label.get("RoadName") or {}).get("Value")
-        route_number = (label.get("RouteNumber") or {}).get("Value")
-        if road_name or route_number:
-            names.append(road_name or route_number)
-    return ", ".join(names)
 
+    SERVICE_HOST = "routes.geo.{region}.amazonaws.com"
 
-class RoutesFunctions:
-    """Calculates routes and creates their line layer."""
+    def request_routes(
+        self, options: RouteOptions, *, credentials: tuple[str, str]
+    ) -> dict[str, Any]:
+        """Sends a CalculateRoutes request with the captured credentials."""
+        validate_region_options(
+            credentials[0],
+            "CalculateRoutes",
+            travel_mode=options.travel_mode,
+            avoid=options.avoid,
+            max_alternatives_value=options.max_alternatives,
+            arrival_time=options.arrival_time,
+        )
+        url = self.build_endpoint("v2/routes", credentials=credentials)
+        return self.api_handler.send_json_post_request(url, build_routes_body(options))
 
-    WGS84_CRS = "EPSG:4326"
-    LAYER_TYPE = "LineString"
-    FIELD_ROADNAME = "RoadName"
-    LINE_COLOR = QColor(255, 0, 0)
-    LINE_WIDTH = 2.0
+    def request_isolines(
+        self, options: IsolineOptions, *, credentials: tuple[str, str]
+    ) -> dict[str, Any]:
+        """Sends a CalculateIsolines request with the captured credentials."""
+        validate_region_options(
+            credentials[0], "CalculateIsolines", travel_mode=options.travel_mode
+        )
+        url = self.build_endpoint("v2/isolines", credentials=credentials)
+        return self.api_handler.send_json_post_request(
+            url, build_isolines_body(options)
+        )
 
-    def __init__(self) -> None:
-        """Initializes the configuration and API handlers."""
-        self.configuration_handler = ConfigurationHandler()
-        self.api_handler = ExternalApiHandler()
+    def request_snap_to_roads(
+        self, options: SnapOptions, *, credentials: tuple[str, str]
+    ) -> dict[str, Any]:
+        """Sends a SnapToRoads request with the captured credentials."""
+        validate_region_options(
+            credentials[0], "SnapToRoads", travel_mode=options.travel_mode
+        )
+        url = self.build_endpoint("v2/snap-to-roads", credentials=credentials)
+        return self.api_handler.send_json_post_request(url, build_snap_body(options))
+
+    def request_route_matrix(
+        self, options: MatrixOptions, *, credentials: tuple[str, str]
+    ) -> dict[str, Any]:
+        """Sends a CalculateRouteMatrix request with the captured credentials."""
+        validate_region_options(
+            credentials[0],
+            "CalculateRouteMatrix",
+            travel_mode=options.travel_mode,
+            origins_count=len(options.origins),
+            destinations_count=len(options.destinations),
+        )
+        url = self.build_endpoint("v2/route-matrix", credentials=credentials)
+        return self.api_handler.send_json_post_request(url, build_matrix_body(options))
 
     def calculate_routes(
         self,
@@ -60,65 +89,13 @@ class RoutesFunctions:
         ed_lat: float,
         credentials: tuple[str, str] | None = None,
     ) -> dict[str, Any]:
-        """Calculates routes between the supplied WGS84 coordinates."""
+        """
+        Calculates routes between the supplied WGS 84 coordinates.
+
+        Deprecated compatibility wrapper around :meth:`request_routes` for
+        callers that use the v4.4 coordinate-based method.
+        """
         if credentials is None:
             credentials = self.configuration_handler.get_credentials()
-        region, apikey = credentials
-        routes_url = (
-            f"https://routes.geo.{region}.amazonaws.com/v2/routes"
-            f"?key={quote(apikey, safe='')}"
-        )
-        data = {
-            "Origin": [st_lon, st_lat],
-            "Destination": [ed_lon, ed_lat],
-            "LegGeometryFormat": "Simple",
-        }
-        return self.api_handler.send_json_post_request(routes_url, data)
-
-    def add_line_layer(self, data: dict[str, Any]) -> None:
-        """Adds route results to the current project as a line layer."""
-        layer = QgsVectorLayer(
-            f"{self.LAYER_TYPE}?crs={self.WGS84_CRS}", "CalculateRoutes", "memory"
-        )
-        self.setup_layer(layer, data)
-
-    def setup_layer(self, layer: QgsVectorLayer, data: dict[str, Any]) -> None:
-        """Populates, styles, and adds the line layer to the project."""
-        self.add_attributes(layer)
-        self.add_features(layer, data)
-        self.apply_layer_style(layer)
-        layer.triggerRepaint()
-        QgsProject.instance().addMapLayer(layer)
-
-    def add_attributes(self, layer: QgsVectorLayer) -> None:
-        """Adds the road-name field to the layer."""
-        fields = QgsFields()
-        fields.append(QgsField(self.FIELD_ROADNAME, QVariant.String))
-        layer.dataProvider().addAttributes(fields)
-        layer.updateFields()
-
-    def add_features(self, layer: QgsVectorLayer, data: dict) -> None:
-        """Adds one line feature for each route leg."""
-        features = []
-        for route in data.get("Routes", []):
-            roadname = major_road_names(route)
-            for leg in route.get("Legs", []):
-                line_points = [
-                    QgsPointXY(coord[0], coord[1])
-                    for coord in leg["Geometry"]["LineString"]
-                ]
-                geometry = QgsGeometry.fromPolylineXY(line_points)
-                feature = QgsFeature(layer.fields())
-                feature.setAttributes([roadname])
-                feature.setGeometry(geometry)
-                features.append(feature)
-        layer.dataProvider().addFeatures(features)
-
-    def apply_layer_style(self, layer: QgsVectorLayer) -> None:
-        """Applies the route line symbol to the layer."""
-        symbol_layer = QgsSimpleLineSymbolLayer()
-        symbol_layer.setColor(self.LINE_COLOR)
-        symbol_layer.setWidth(self.LINE_WIDTH)
-        symbol = QgsSymbol.defaultSymbol(layer.geometryType())
-        symbol.changeSymbolLayer(0, symbol_layer)
-        layer.setRenderer(QgsSingleSymbolRenderer(symbol))
+        options = RouteOptions(origin=(st_lon, st_lat), destination=(ed_lon, ed_lat))
+        return self.request_routes(options, credentials=credentials)
