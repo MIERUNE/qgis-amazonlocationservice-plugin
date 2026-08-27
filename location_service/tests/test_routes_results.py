@@ -633,18 +633,38 @@ class TestCollectNotices(unittest.TestCase):
             with self.subTest(data=data):
                 assert collect_notices(data) == []
 
-    def test_ignores_optional_notice_values_that_are_not_arrays(self):
+    def test_ignores_unusable_route_containers(self):
         cases = (
-            {"Notices": 1},
             {"Routes": 1},
             {"Routes": [{"Legs": 1}]},
+        )
+        for data in cases:
+            with self.subTest(data=data):
+                assert collect_notices(data) == []
+
+    def test_rejects_malformed_notice_values(self):
+        cases = (
+            {"Notices": {}},
+            {"Notices": [None]},
             {
                 "Routes": [
                     {
                         "Legs": [
                             {
                                 "Type": "Vehicle",
-                                "VehicleLegDetails": {"Notices": 1},
+                                "VehicleLegDetails": {"Notices": "invalid"},
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "Routes": [
+                    {
+                        "Legs": [
+                            {
+                                "Type": "Vehicle",
+                                "VehicleLegDetails": {"Notices": [None]},
                             }
                         ]
                     }
@@ -652,8 +672,13 @@ class TestCollectNotices(unittest.TestCase):
             },
         )
         for data in cases:
-            with self.subTest(data=data):
-                assert collect_notices(data) == []
+            with (
+                self.subTest(data=data),
+                self.assertRaisesRegex(
+                    BrokenResponseError, "malformed Notices.*no layer was created"
+                ),
+            ):
+                collect_notices(data)
 
 
 def _attribution(description="Toei Subway", url="https://example.com/toei"):

@@ -165,6 +165,17 @@ def _response_list(container: dict[str, Any], key: str, owner: str) -> list:
     return value
 
 
+def validate_notices(container: dict[str, Any], owner: str) -> list[dict[str, Any]]:
+    """Returns the optional Notices array after validating its entries."""
+    notices = _response_list(container, "Notices", owner)
+    if any(not isinstance(notice, dict) for notice in notices):
+        raise BrokenResponseError(
+            f"{owner} carries a malformed Notices value; no layer was "
+            "created from this response."
+        )
+    return notices
+
+
 def major_road_names(route: dict[str, Any]) -> str:
     """
     Joins major-road labels, preferring ``RoadName`` over ``RouteNumber``.
@@ -330,12 +341,8 @@ def collect_notices(data: dict[str, Any]) -> list[dict[str, Any]]:
     to the common ``Code`` / ``Impact`` pair plus its location in the route.
     """
     notices = []
-    response_notices = data.get("Notices")
-    if not isinstance(response_notices, list):
-        response_notices = []
-    for notice in response_notices:
-        if isinstance(notice, dict):
-            notices.append(_normalized_notice(notice, "response", None, None, ""))
+    for notice in validate_notices(data, "The response"):
+        notices.append(_normalized_notice(notice, "response", None, None, ""))
     routes = data.get("Routes")
     if not isinstance(routes, list):
         return notices
@@ -369,14 +376,10 @@ def _leg_notices(
     details = leg.get(details_key)
     if not isinstance(details, dict):
         return found
-    notices = details.get("Notices")
-    if not isinstance(notices, list):
-        return found
-    for notice in notices:
-        if isinstance(notice, dict):
-            found.append(
-                _normalized_notice(notice, "leg", route_index, leg_index, leg_type)
-            )
+    for notice in validate_notices(details, "A leg's details"):
+        found.append(
+            _normalized_notice(notice, "leg", route_index, leg_index, leg_type)
+        )
     return found
 
 

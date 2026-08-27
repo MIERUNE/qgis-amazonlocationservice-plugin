@@ -985,7 +985,8 @@ class RoutesUi(QDialog):
 
     def _snap_result_layers(self, request: dict, result: dict) -> tuple:
         """Builds the SnapToRoads layers and success message."""
-        self._report_snap_notices(result)
+        notices = routes_results.validate_notices(result, "The SnapToRoads response")
+        self._report_snap_notices(notices)
         rows = request["rows"]
         # Always verify response indexes before joining input attributes,
         # even when the confidence-point layer is disabled.
@@ -1000,7 +1001,7 @@ class RoutesUi(QDialog):
             routes_layers.build_snap_line_layer(
                 line_points,
                 len(rows),
-                len(result.get("Notices") or []),
+                len(notices),
             )
         ]
         if request["output_confidence"]:
@@ -1063,12 +1064,10 @@ class RoutesUi(QDialog):
             text = f"{function} returned {len(notices)} notice(s)."
         push_message(WARNING, f"{text} See the log panel for details.", duration=10)
 
-    def _report_snap_notices(self, result: dict) -> None:
+    def _report_snap_notices(self, notices: list) -> None:
         """Shows the SnapToRoads notices (Code / Title / TracePointIndexes)."""
         labels = []
-        for notice in result.get("Notices") or []:
-            if not isinstance(notice, dict):
-                continue
+        for notice in notices:
             QgsMessageLog.logMessage(
                 f"SnapToRoads notice: code={notice.get('Code')!r} "
                 f"title={notice.get('Title')!r} "

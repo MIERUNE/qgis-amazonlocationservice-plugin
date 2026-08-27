@@ -866,6 +866,21 @@ class TestRoutesUiRegressions(unittest.TestCase):
         assert "more routes than the request allowed" in text
         assert self._published_layer_names() == []
 
+    def test_a_calculate_routes_response_with_malformed_notices_is_rejected(self):
+        self._set_route_positions()
+        routes = self._mock_routes()
+        response = dict(ROUTE_RESULT)
+        response["Notices"] = {"Code": "InvalidShape"}
+        routes.request_routes.return_value = response
+
+        error, _push_message = self._run_dialog()
+
+        error.assert_called_once()
+        _parent, title, text = error.call_args.args
+        assert title == "Routes Error"
+        assert "malformed Notices" in text
+        assert self._published_layer_names() == []
+
     def test_a_calculate_isolines_run_publishes_the_isoline_layer(self):
         self.dialog.routes_comboBox.setCurrentText("CalculateIsolines")
         self._set_isoline_center()
@@ -899,6 +914,22 @@ class TestRoutesUiRegressions(unittest.TestCase):
             "SnapToRoads",
             "SnapToRoads (confidence points)",
         ]
+
+    def test_a_snap_response_with_malformed_notices_is_rejected(self):
+        self.dialog.routes_comboBox.setCurrentText("SnapToRoads")
+        self._set_snap_layer()
+        routes = self._mock_routes()
+        response = _snap_response(TRACE_POSITIONS)
+        response["Notices"] = [None]
+        routes.request_snap_to_roads.return_value = response
+
+        error, _push_message = self._run_dialog()
+
+        error.assert_called_once()
+        _parent, title, text = error.call_args.args
+        assert title == "Routes Error"
+        assert "malformed Notices" in text
+        assert self._published_layer_names() == []
 
     def test_a_route_matrix_run_publishes_the_table_and_the_od_lines(self):
         self.dialog.routes_comboBox.setCurrentText("CalculateRouteMatrix")
