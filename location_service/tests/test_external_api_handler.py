@@ -108,6 +108,35 @@ class TestHandleNetworkReply(unittest.TestCase):
         assert "top-level JSON value is not an object" in str(context.exception)
         assert reply.deleted
 
+    def test_each_reply_replaces_the_pricing_bucket_of_the_previous_one(self):
+        # The bucket describes the reply at hand, so a reply without the
+        # header must not leave the previous request's bucket behind.
+        cases = (
+            (None, None),
+            ({"x-amz-geo-pricing-bucket": b"RoutesCore"}, "RoutesCore"),
+        )
+        for headers, expected in cases:
+            with self.subTest(headers=headers):
+                reply = _FakeReply(
+                    external_api_handler._NoError, b"{}", headers=headers
+                )
+                handler = self._handler()
+                handler.last_pricing_bucket = "PlacesCore"
+
+                handler.handle_network_reply(reply)
+
+                assert handler.last_pricing_bucket == expected
+
+    def test_a_failed_reply_also_clears_the_previous_pricing_bucket(self):
+        reply = _FakeReply(error=1, error_string="Connection refused")
+        handler = self._handler()
+        handler.last_pricing_bucket = "PlacesCore"
+
+        with self.assertRaises(ApiError):
+            handler.handle_network_reply(reply)
+
+        assert handler.last_pricing_bucket is None
+
     def test_error_without_body_has_no_detail(self):
         reply = _FakeReply(error=1, body=b"", error_string="Connection refused")
         with self.assertRaises(RuntimeError) as context:
@@ -193,6 +222,30 @@ class TestRequestSending(unittest.TestCase):
                     handler.send_json_get_request("https://example.com/")
 
                 assert handler.network_manager.get_count == 1
+
+    def test_post_errors_are_not_retried(self):
+        for status_code in (400, 429, 500):
+            with self.subTest(status_code=status_code):
+                handler = self._handler()
+                handler._execute_reply = Mock(
+                    side_effect=ApiError("Request failed", status_code=status_code)
+                )
+
+                with self.assertRaises(ApiError):
+                    handler.send_json_post_request("https://example.com/", {})
+
+                assert handler.network_manager.post_count == 1
+
+    def test_sending_clears_the_bucket_before_the_reply_arrives(self):
+        # A failed or header-less reply must never be reported under the
+        # pricing bucket of the request before it.
+        handler = self._handler()
+        handler.last_pricing_bucket = "PlacesCore"
+        handler._execute_reply = Mock(return_value={"Routes": []})
+
+        handler.send_json_get_request("https://example.com/")
+
+        assert handler.last_pricing_bucket is None
 
     def test_abort_stops_active_reply(self):
         handler = self._handler()

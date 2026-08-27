@@ -34,7 +34,7 @@ Plugins can also be installed by loading a [zip file](https://github.com/MIERUNE
 
 ![menu](img/menu.png)
 
-- `Config`: Set each region name and API key
+- `Config`: Set the region and API key
 - `Maps`: Map display function
 - `Places`: Search and geocoding functions
 - `Routes`: Routing function
@@ -45,7 +45,7 @@ Plugins can also be installed by loading a [zip file](https://github.com/MIERUNE
 ![config](img/config.png)
 
 1. Click the `Config` menu
-2. Set each region name and API key
+2. Set the region and API key
     - `Region`: an AWS region code such as `ap-northeast-1`
     - `API Key`: `v1.public.xxxxx`
 3. Click `Save`
@@ -65,7 +65,7 @@ Plugins can also be installed by loading a [zip file](https://github.com/MIERUNE
     - `Traffic`: All / Congestion
     - `Travel Modes`: Transit / Truck
 5. Click `Add`
-6. The map is displayed as a layer
+6. The basemap is displayed as a layer
 
 #### API key handling
 
@@ -83,7 +83,7 @@ Plugins can also be installed by loading a [zip file](https://github.com/MIERUNE
 3. Fill in the parameters of the selected function
 4. (Optional or required) Click `Get Location` and click a point on the map
 5. Click the search button
-6. Search results are added as a point layer, and the dialog stays open so you can run another search
+6. Results are added as layers, and the dialog stays open so you can run another operation
 
 Available functions:
 
@@ -99,15 +99,20 @@ Available functions:
 ![routes](img/routes.gif)
 
 1. Click the `Routes` menu
-2. Select `Select Function`
-3. Click `Get Location(Starting Point)`
-4. Click the starting point
-5. Click `Get Location(End Point)`
-6. Click on the endpoint
-7. Click `Search`
-8. Search results are displayed in layers
+2. Choose a function in `Select Function`
+3. Fill in the parameters of the selected function
+4. (Optional or required) Click `Get Location` and click a point on the map
+5. Click the run button
+6. Results are added as layers, and the dialog stays open so you can run another operation
 
-※ As of January 2025, only `CalculateRoutes` is available.
+Available functions:
+
+- `CalculateRoutes`: Calculates a route between a start and end point. Supports waypoints, `Travel Mode`, `Optimize For`, `Avoid`, and a departure or arrival time.
+- `CalculateIsolines`: Calculates the area reachable within a time or distance from a specified point. Supports direction, `Travel Mode`, and up to five thresholds.
+- `SnapToRoads`: Snaps a GPS trace from a point or multipoint layer to roads. Supports `Timestamp` / `Heading` / `Speed` fields and `Snap Radius`.
+- `CalculateRouteMatrix`: Calculates distances and durations in bulk between two point layers. Results are output as a table, with optional straight OD lines.
+
+※ As of August 2026, `OptimizeWaypoints` is not supported.
 
 ### Terms Function
 

@@ -111,7 +111,8 @@ QComboBox:disabled {
 }
 
 /* --- Spin Box --- */
-QSpinBox {
+QSpinBox,
+QDateTimeEdit {
     border: 1px solid #D5DBDB;
     border-radius: 4px;
     padding: 7px 10px;
@@ -121,38 +122,45 @@ QSpinBox {
     min-height: 18px;
 }
 
-QSpinBox:focus {
+QSpinBox:focus,
+QDateTimeEdit:focus {
     border: 2px solid #FF9900;
     padding: 6px 9px;
 }
 
-QSpinBox:disabled {
+QSpinBox:disabled,
+QDateTimeEdit:disabled {
     background-color: #F2F3F3;
     color: #687078;
     border: 1px solid #D5DBDB;
 }
 
 QSpinBox::up-button,
-QSpinBox::down-button {
+QSpinBox::down-button,
+QDateTimeEdit::up-button,
+QDateTimeEdit::down-button {
     subcontrol-origin: border;
     width: 20px;
     border-left: 1px solid #D5DBDB;
     background-color: #FAFAFA;
 }
 
-QSpinBox::up-button {
+QSpinBox::up-button,
+QDateTimeEdit::up-button {
     subcontrol-position: top right;
     border-top-right-radius: 4px;
 }
 
-QSpinBox::down-button {
+QSpinBox::down-button,
+QDateTimeEdit::down-button {
     subcontrol-position: bottom right;
     border-bottom-right-radius: 4px;
 }
 
 /* Styling the stepper buttons suppresses the native arrows, so draw
    replacements as CSS border triangles. */
-QSpinBox::up-arrow {
+QSpinBox::up-arrow,
+QDateTimeEdit::up-arrow {
     width: 0;
     height: 0;
     border-left: 4px solid transparent;
@@ -160,7 +168,8 @@ QSpinBox::up-arrow {
     border-bottom: 5px solid #545B64;
 }
 
-QSpinBox::down-arrow {
+QSpinBox::down-arrow,
+QDateTimeEdit::down-arrow {
     width: 0;
     height: 0;
     border-left: 4px solid transparent;
@@ -228,6 +237,10 @@ QPushButton#button_search:pressed {
 
 /* --- Secondary Buttons (Get Location, Update Details, Load More) --- */
 QPushButton#button_click,
+QPushButton#iso_button_click,
+QPushButton#wp_button_click,
+QPushButton#wp_button_undo,
+QPushButton#wp_button_clear,
 QPushButton#st_button_click,
 QPushButton#ed_button_click,
 QPushButton#button_enrich,
@@ -244,6 +257,10 @@ QPushButton#button_load_more {
 }
 
 QPushButton#button_click:hover,
+QPushButton#iso_button_click:hover,
+QPushButton#wp_button_click:hover,
+QPushButton#wp_button_undo:hover,
+QPushButton#wp_button_clear:hover,
 QPushButton#st_button_click:hover,
 QPushButton#ed_button_click:hover,
 QPushButton#button_enrich:hover,
@@ -254,6 +271,10 @@ QPushButton#button_load_more:hover {
 }
 
 QPushButton#button_click:pressed,
+QPushButton#iso_button_click:pressed,
+QPushButton#wp_button_click:pressed,
+QPushButton#wp_button_undo:pressed,
+QPushButton#wp_button_clear:pressed,
 QPushButton#st_button_click:pressed,
 QPushButton#ed_button_click:pressed,
 QPushButton#button_enrich:pressed,
@@ -263,6 +284,10 @@ QPushButton#button_load_more:pressed {
 }
 
 QPushButton#button_click:disabled,
+QPushButton#iso_button_click:disabled,
+QPushButton#wp_button_click:disabled,
+QPushButton#wp_button_undo:disabled,
+QPushButton#wp_button_clear:disabled,
 QPushButton#st_button_click:disabled,
 QPushButton#ed_button_click:disabled,
 QPushButton#button_enrich:disabled,
@@ -309,6 +334,10 @@ QPushButton#button_search:focus {
 }
 
 QPushButton#button_click:focus,
+QPushButton#iso_button_click:focus,
+QPushButton#wp_button_click:focus,
+QPushButton#wp_button_undo:focus,
+QPushButton#wp_button_clear:focus,
 QPushButton#st_button_click:focus,
 QPushButton#ed_button_click:focus,
 QPushButton#button_enrich:focus,
@@ -352,6 +381,67 @@ QCheckBox:disabled {
 QCheckBox::indicator:disabled {
     background-color: #F2F3F3;
     border: 1px solid #D5DBDB;
+}
+
+/* --- Radio Button --- */
+QRadioButton {
+    color: #16191F;
+    font-size: 13px;
+    spacing: 6px;
+    margin-top: 6px;
+}
+
+QRadioButton::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #D5DBDB;
+    border-radius: 8px;
+    background-color: #FFFFFF;
+}
+
+QRadioButton::indicator:hover {
+    border: 1px solid #879596;
+}
+
+QRadioButton::indicator:checked {
+    background-color: #FF9900;
+    border: 1px solid #EC7211;
+}
+
+QRadioButton:disabled {
+    color: #687078;
+}
+
+QRadioButton::indicator:disabled {
+    background-color: #F2F3F3;
+    border: 1px solid #D5DBDB;
+}
+
+/* --- List Widget --- */
+QListWidget {
+    border: 1px solid #D5DBDB;
+    border-radius: 4px;
+    background-color: #FFFFFF;
+    color: #16191F;
+    font-size: 13px;
+}
+
+QListWidget::item {
+    padding: 2px 4px;
+}
+
+QListWidget::item:selected {
+    background-color: #F1FAFF;
+    color: #16191F;
+}
+
+QListWidget:focus {
+    border: 2px solid #FF9900;
+}
+
+QListWidget:disabled {
+    background-color: #F2F3F3;
+    color: #687078;
 }
 
 /* --- Message Box --- */

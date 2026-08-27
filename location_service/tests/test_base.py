@@ -1,10 +1,15 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from location_service.tests import HAS_QGIS
 
 if HAS_QGIS:
-    from qgis.core import QgsCoordinateReferenceSystem, QgsPointXY, QgsProject
+    from qgis.core import (
+        QgsCoordinateReferenceSystem,
+        QgsCsException,
+        QgsPointXY,
+        QgsProject,
+    )
     from qgis.gui import QgsMapCanvas, QgsMapToolPan
     from qgis.PyQt.QtCore import QPoint
     from qgis.PyQt.QtWidgets import QLineEdit
@@ -12,6 +17,7 @@ if HAS_QGIS:
     from location_service.utils import click_handler
     from location_service.utils.click_handler import (
         MapClickCoordinateUpdater,
+        MultiPointCollector,
         parse_lonlat,
         transform_to_wgs84,
     )
@@ -35,6 +41,12 @@ if HAS_QGIS:
 
     class _FixedPointUpdater(MapClickCoordinateUpdater):
         """Map picker returning a stable point independent of canvas dimensions."""
+
+        def toMapCoordinates(self, _position):
+            return QgsPointXY(10.0, 20.0)
+
+    class _FixedPointCollector(MultiPointCollector):
+        """Waypoint collector returning a stable point for release tests."""
 
         def toMapCoordinates(self, _position):
             return QgsPointXY(10.0, 20.0)
@@ -157,6 +169,41 @@ class TestCoordinateTransform(unittest.TestCase):
         assert abs(result.x() - 1.0) < 1e-6
         assert abs(result.y()) < 1e-6
 
+    def test_rejects_a_missing_map_crs(self):
+        with self.assertRaisesRegex(ValueError, "map CRS is missing or invalid"):
+            transform_to_wgs84(QgsPointXY(10.0, 20.0), QgsCoordinateReferenceSystem())
+
+    def test_rejects_an_invalid_transform(self):
+        transform = Mock()
+        transform.isValid.return_value = False
+
+        with (
+            patch.object(click_handler, "wgs84_transform", return_value=transform),
+            self.assertRaisesRegex(ValueError, "cannot be transformed to WGS 84"),
+        ):
+            transform_to_wgs84(
+                QgsPointXY(10.0, 20.0),
+                QgsCoordinateReferenceSystem("EPSG:4326"),
+            )
+
+        transform.transform.assert_not_called()
+
+    def test_wraps_a_point_transform_failure_as_an_input_error(self):
+        transform = Mock()
+        transform.isValid.return_value = True
+        transform.transform.side_effect = QgsCsException("transform failed")
+
+        with (
+            patch.object(click_handler, "wgs84_transform", return_value=transform),
+            self.assertRaisesRegex(
+                ValueError, "clicked location cannot be transformed"
+            ),
+        ):
+            transform_to_wgs84(
+                QgsPointXY(10.0, 20.0),
+                QgsCoordinateReferenceSystem("EPSG:4326"),
+            )
+
 
 @unittest.skipUnless(HAS_QGIS, "QGIS runtime is required")
 class TestMapClickCoordinateUpdater(unittest.TestCase):
@@ -215,6 +262,68 @@ class TestMapClickCoordinateUpdater(unittest.TestCase):
         assert start_lat_edit.text() == ""
         assert end_lon_edit.text() == ""
         assert end_lat_edit.text() == ""
+
+    def test_a_transform_error_keeps_the_fields_and_restores_the_map_tool(self):
+        lon_edit = QLineEdit("139.7")
+        lat_edit = QLineEdit("35.6")
+        picker = _FixedPointUpdater(self.canvas, lon_edit, lat_edit)
+        picker.arm()
+
+        with (
+            patch.object(
+                click_handler,
+                "transform_to_wgs84",
+                side_effect=ValueError("The map CRS is missing or invalid."),
+            ),
+            patch.object(click_handler, "push_message") as push_message,
+        ):
+            picker.canvasReleaseEvent(_ReleaseEvent(click_handler._LEFT_BUTTON))
+
+        assert lon_edit.text() == "139.7"
+        assert lat_edit.text() == "35.6"
+        assert self.canvas.mapTool() is self.original_tool
+        push_message.assert_called_once_with(
+            click_handler.WARNING, "The map CRS is missing or invalid."
+        )
+
+
+@unittest.skipUnless(HAS_QGIS, "QGIS runtime is required")
+class TestMultiPointCollector(unittest.TestCase):
+    """A failed map transform must not collect a waypoint."""
+
+    def setUp(self):
+        self.canvas = QgsMapCanvas()
+        self.canvas.setDestinationCrs(QgsCoordinateReferenceSystem("EPSG:4326"))
+        self.original_tool = QgsMapToolPan(self.canvas)
+        self.canvas.setMapTool(self.original_tool)
+
+    def tearDown(self):
+        current_tool = self.canvas.mapTool()
+        if current_tool is not None:
+            self.canvas.unsetMapTool(current_tool)
+        self.canvas.deleteLater()
+
+    def test_a_transform_error_emits_no_point_and_restores_the_map_tool(self):
+        points = []
+        collector = _FixedPointCollector(self.canvas)
+        collector.point_collected.connect(points.append)
+        collector.arm()
+
+        with (
+            patch.object(
+                click_handler,
+                "transform_to_wgs84",
+                side_effect=ValueError("The map CRS is missing or invalid."),
+            ),
+            patch.object(click_handler, "push_message") as push_message,
+        ):
+            collector.canvasReleaseEvent(_ReleaseEvent(click_handler._LEFT_BUTTON))
+
+        assert points == []
+        assert self.canvas.mapTool() is self.original_tool
+        push_message.assert_called_once_with(
+            click_handler.WARNING, "The map CRS is missing or invalid."
+        )
 
 
 if __name__ == "__main__":

@@ -83,7 +83,7 @@ QGISでAmazon Location Service v2の機能を利用するプラグインです�
 3. 選択した機能のパラメータを入力
 4. （任意または必須）`Get Location`をクリックし、地図上の位置をクリック
 5. 検索ボタンをクリック
-6. 検索結果がポイントレイヤで追加され、ダイアログは開いたまま続けて検索可能
+6. 結果がレイヤで追加され、ダイアログは開いたまま続けて実行可能
 
 利用できる機能:
 
@@ -99,15 +99,20 @@ QGISでAmazon Location Service v2の機能を利用するプラグインです�
 ![routes](img/routes.gif)
 
 1. `Routes`メニューをクリック
-2. `Select Function`を選択
-3. `Get Location(Starting Point)`をクリック
-4. 始点をクリック
-5. `Get Location(End Point)`をクリック
-6. 終点をクリック
-7. `Search`をクリック
-8. 検索結果がレイヤで表示
+2. `Select Function`で機能を選択
+3. 選択した機能のパラメータを入力
+4. （任意または必須）`Get Location`をクリックし、地図上の位置をクリック
+5. 実行ボタンをクリック
+6. 結果がレイヤで追加され、ダイアログは開いたまま続けて実行可能
 
-※ 2025.01現在、`CalculateRoutes`が利用可能
+利用できる機能:
+
+- `CalculateRoutes`: 始点と終点の間のルートを計算。経由地、`Travel Mode`、`Optimize For`、`Avoid`、出発・到着時刻の指定に対応。
+- `CalculateIsolines`: 指定地点を基準に、時間または距離で到達可能な範囲を計算。方向、`Travel Mode`、最大5つのしきい値に対応。
+- `SnapToRoads`: ポイント / マルチポイントレイヤのGPSトレースを道路へスナップ。`Timestamp` / `Heading` / `Speed`フィールドと`Snap Radius`の指定に対応。
+- `CalculateRouteMatrix`: 2つのポイントレイヤ間の距離と所要時間を一括計算。結果はテーブルで出力され、任意でOD直線を追加可能。
+
+※ 2026.08現在、`OptimizeWaypoints`は未対応
 
 ### Terms機能
 
@@ -118,7 +123,7 @@ QGISでAmazon Location Service v2の機能を利用するプラグインです�
 
 [AWS Service Terms](https://aws.amazon.com/jp/service-terms)
 
-Amazon Location Serviceにはデータ利用について利用規約があります。「82. Amazon Location Serviceプレビュー」の項目を確認し、自己責任でご利用ください。開発者は、本サービスの利用に関して発生するいかなる損害についても一切の責任を負いません。  
+Amazon Location Serviceにはデータ利用について利用規約があります。「82. Amazon Location Service」の項目を確認し、自己責任でご利用ください。開発者は、本サービスの利用に関して発生するいかなる損害についても一切の責任を負いません。
 
 HEREをプロバイダとして使用する場合、基本的な利用規約に加えて、次のことを行うことはできません。  
 
