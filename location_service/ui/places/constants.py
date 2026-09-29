@@ -2,8 +2,16 @@ from __future__ import annotations
 
 import re
 
-# Places operations exposed as Processing algorithms.
+# Functions exposed in the dialog, in display order; the index matches the
+# QStackedWidget page order in places.ui.
 FUNCTIONS = ("SearchText", "Geocode", "ReverseGeocode", "SearchNearby")
+
+FUNCTION_PAGE = {
+    "SearchText": 0,
+    "Geocode": 1,
+    "ReverseGeocode": 2,
+    "SearchNearby": 3,
+}
 
 # Default MaxResults per function (ReverseGeocode returns one place by default).
 DEFAULT_MAX_RESULTS = {
@@ -13,9 +21,33 @@ DEFAULT_MAX_RESULTS = {
     "SearchNearby": 20,
 }
 
-# An empty language (or "Default") omits the parameter, and BCP 47 codes
-# such as "ja", "en-US", or "en-US-u-ca-gregory" are accepted. The API caps
-# the value at 35 characters.
+# Whether the operation requires the clicked position.
+POSITION_REQUIRED = {
+    "SearchText": True,
+    "Geocode": False,
+    "ReverseGeocode": True,
+    "SearchNearby": True,
+}
+
+# Label shown above the shared position fields per function.
+POSITION_LABEL = {
+    "SearchText": "BiasPosition (required)",
+    "Geocode": "BiasPosition (optional)",
+    "ReverseGeocode": "QueryPosition (required)",
+    "SearchNearby": "QueryPosition (required)",
+}
+
+# Primary action button text per function.
+SEARCH_BUTTON_LABEL = {
+    "SearchText": "Search",
+    "Geocode": "Geocode",
+    "ReverseGeocode": "Reverse geocode",
+    "SearchNearby": "Search nearby",
+}
+
+# The Language combo is editable: "Default" (or an empty field) omits the
+# parameter, and BCP 47 codes such as "ja", "en-US", or "en-US-u-ca-gregory"
+# are accepted. The API caps the value at 35 characters.
 LANGUAGE_DEFAULT = "Default"
 LANGUAGE_PATTERN = re.compile(r"^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*\Z")
 LANGUAGE_MAX_LENGTH = 35
@@ -50,6 +82,11 @@ ADDITIONAL_FEATURES_BY_OPERATION = {
     "ReverseGeocode": ("TimeZone",),
     "SearchNearby": ("Contact", "TimeZone"),
 }
+UPDATE_DETAILS_TOOLTIP = (
+    "Update contact / opening-hours / time-zone details for the selected features "
+    "of the active Places layer. Each unique selected PlaceId sends one additional "
+    "Storage request."
+)
 
 
 def automatic_additional_features(region: str, operation: str) -> list[str]:

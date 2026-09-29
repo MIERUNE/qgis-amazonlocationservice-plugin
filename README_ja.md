@@ -36,8 +36,8 @@ QGISでAmazon Location Service v2の機能を利用するプラグインです�
 
 - `Config`: リージョン名とAPIキーを設定
 - `Maps`: 地図表示機能
-- `Places`: 検索・ジオコーディング機能（Processingアルゴリズム）
-- `Routes`: ルーティング機能（Processingアルゴリズム）
+- `Places`: 検索・ジオコーディング機能
+- `Routes`: ルーティング機能
 - `Terms`: 利用規約ページを表示
 
 ### 設定
@@ -74,37 +74,56 @@ QGISでAmazon Location Service v2の機能を利用するプラグインです�
 
 ※ 2026.08現在、`Buildings3D`と`Terrain3D`は未対応
 
-### Processingアルゴリズム
+### Places機能
 
-Places / Routes の各機能は、Processingツールボックスの `Amazon Location Service` プロバイダに登録されたProcessingアルゴリズムです。そのため、バッチ処理・グラフィカルモデラー・`qgis_process` からも実行できます。
+![places](img/places.gif)
 
-1. `Places` / `Routes` メニュー（またはツールバーのボタン）から機能を選択するか、Processingツールボックスで `Amazon Location Service` を開く
-2. パラメータを入力する。位置パラメータは地図上のクリックや任意のCRSの座標で指定可能（WGS 84に変換して送信）
-3. `実行`をクリック
-4. 結果は出力レイヤとして追加される（一時レイヤまたはファイルへの保存を選択可能）
+1. `Places`メニューをクリック
+2. `Select Function`で機能を選択
+3. 選択した機能のパラメータを入力
+4. （任意または必須）`Get Location`をクリックし、地図上の位置をクリック
+5. 検索ボタンをクリック
+6. 結果がレイヤで追加され、ダイアログは開いたまま続けて実行可能
 
-リクエストの課金区分の見積もり、料金バケット、Notices、データ帰属表示（Attributions）はProcessingのログに出力されます。事前の確認ダイアログは表示されないため、`CalculateIsolines`（しきい値ごとに課金）や`CalculateRouteMatrix`（出発地 × 目的地の組ごとに課金）は入力件数に注意してください。
+利用できる機能:
 
-#### Places
-
-- `SearchText`: フリーテキストで場所を検索。バイアス位置は必須。`Countries`フィルタと`Travel Mode`（Car / Scooter / Truck）に対応。詳細設定で最大5ページまで取得可能（1ページごとに1リクエスト）。
+- `SearchText`: フリーテキストで場所を検索。バイアス位置は必須。`Countries`フィルタと`Travel Mode`（Car / Scooter / Truck）に対応。
 - `Geocode`: 住所を座標に変換。バイアス位置（任意）、`Countries`フィルタ、`Address Names`モード、`Postal Code Mode`に対応。
-- `ReverseGeocode`: 位置を最寄りの住所に変換。位置は必須。`QueryRadius`（メートル、0 = 未指定）は任意。
-- `SearchNearby`: 位置の周辺スポットを検索。位置と`QueryRadius`（メートル）が必須。詳細設定で最大5ページまで取得可能。
-- `GetPlace (add place details)`: `PlaceId`フィールドを持つポイントレイヤをコピーし、`Phone` / `Website` / `OpeningHours` / `TimeZone`を追加。一意なPlaceIdごとに1リクエスト（最大25件）。対象を絞るには「選択地物のみ」を使用。
-
-Placesのリクエストはすべて`IntendedUse=Storage`で送信されます。
+- `ReverseGeocode`: クリックした位置を最寄りの住所に変換。位置は必須。`QueryRadius`（メートル、0 = 未指定）は任意。
+- `SearchNearby`: クリックした位置の周辺スポットを検索。位置と`QueryRadius`（メートル）が必須。
 
 ※ 2026.08現在、`Suggest`と`Autocomplete`は未対応
 
-#### Routes
+### Routes機能
 
-- `CalculateRoutes`: 始点と終点の間のルートを計算。経由地（ポイントレイヤ、順序フィールドで並び替え）、`Travel Mode`、`Optimize For`、`Avoid`、出発・到着時刻、Transitのモード絞り込みに対応。ルート概要テーブルは任意出力。
-- `CalculateIsolines`: 指定地点を基準に、時間（分）または距離（km）で到達可能な範囲を計算。方向、`Travel Mode`、最大5つのしきい値に対応。
-- `SnapToRoads`: ポイント / マルチポイントレイヤのGPSトレースを道路へスナップ。`ID` / `Order` / `Timestamp` / `Heading` / `Speed`フィールドと`Snap Radius`の指定に対応。信頼度ポイントは任意出力。
-- `CalculateRouteMatrix`: 2つのポイントレイヤ間の距離と所要時間を一括計算。結果はテーブルで出力され、任意でOD直線を出力可能（最大100組）。
+![routes](img/routes.gif)
+
+1. `Routes`メニューをクリック
+2. `Select Function`で機能を選択
+3. 選択した機能のパラメータを入力
+4. （任意または必須）`Get Location`をクリックし、地図上の位置をクリック
+5. 実行ボタンをクリック
+6. 結果がレイヤで追加され、ダイアログは開いたまま続けて実行可能
+
+利用できる機能:
+
+- `CalculateRoutes`: 始点と終点の間のルートを計算。経由地、`Travel Mode`、`Optimize For`、`Avoid`、出発・到着時刻の指定に対応。
+- `CalculateIsolines`: 指定地点を基準に、時間または距離で到達可能な範囲を計算。方向、`Travel Mode`、最大5つのしきい値に対応。
+- `SnapToRoads`: ポイント / マルチポイントレイヤのGPSトレースを道路へスナップ。`Timestamp` / `Heading` / `Speed`フィールドと`Snap Radius`の指定に対応。
+- `CalculateRouteMatrix`: 2つのポイントレイヤ間の距離と所要時間を一括計算。結果はテーブルで出力され、任意でOD直線を追加可能。
 
 ※ 2026.08現在、`OptimizeWaypoints`は未対応
+
+### Processingアルゴリズム
+
+Places / Routes と同じ機能は、Processingツールボックスの `Amazon Location Service` プロバイダのProcessingアルゴリズムとしても利用できます。バッチ処理・グラフィカルモデラー・`qgis_process` から実行でき、`Config`で設定したリージョンとAPIキーを使用します。
+
+- Places: `SearchText`、`Geocode`、`ReverseGeocode`、`SearchNearby`、`GetPlace (add place details)`
+- Routes: `CalculateRoutes`、`CalculateIsolines`、`SnapToRoads`、`CalculateRouteMatrix`
+
+位置パラメータは地図上のクリックや任意のCRSの座標で指定でき、WGS 84に変換して送信します。`GetPlace`は`PlaceId`フィールドを持つポイントレイヤをコピーし、`Phone` / `Website` / `OpeningHours` / `TimeZone`を追加します（一意なPlaceIdは最大25件）。`SearchText`と`SearchNearby`は最大5ページまで取得できます。
+
+ダイアログと異なり、アルゴリズムは課金の確認ダイアログを表示しません。課金区分の見積もり、料金バケット、Notices、データ帰属表示はProcessingのログに出力されます。
 
 ### Terms機能
 

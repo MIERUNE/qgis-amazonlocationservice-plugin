@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote, urlencode
@@ -12,12 +13,14 @@ from qgis.core import (
     QgsMarkerSymbol,
     QgsPalLayerSettings,
     QgsPointXY,
+    QgsProject,
     QgsSimpleMarkerSymbolLayer,
     QgsSingleSymbolRenderer,
     QgsTextFormat,
     QgsVectorLayer,
     QgsVectorLayerSimpleLabeling,
 )
+from qgis.PyQt import sip
 from qgis.PyQt.QtCore import QVariant
 from qgis.PyQt.QtGui import QColor
 
@@ -75,13 +78,17 @@ def country_code_for_feature(country: dict[str, Any]) -> str:
     return ""
 
 
+class PlacesOperationCancelledError(RuntimeError):
+    """Raised when cancellation or a layer change stops a Places operation."""
+
+
 class PlacesFunctions(ServiceFunctionsBase):
     """Runs Amazon Location Places V2 searches and creates their point layers."""
 
     SERVICE_HOST = "places.geo.{region}.amazonaws.com"
 
     DEFAULT_MAX_RESULTS = 10
-    # GetPlace sends one billable Storage request per unique PlaceId.
+    # Detail updates send one billable Storage request per unique PlaceId.
     MAX_ENRICH_FEATURES = 25
     ENRICH_FEATURES = ("Contact", "TimeZone")
 
@@ -315,6 +322,19 @@ class PlacesFunctions(ServiceFunctionsBase):
             url = f"{url}&{query}"
         return url
 
+    def add_point_layer(
+        self,
+        data: dict[str, Any],
+        operation: str,
+        intended_use: str | None = None,
+    ) -> QgsVectorLayer:
+        """Adds search results to the current project as a point layer."""
+        layer = QgsVectorLayer(
+            f"{self.LAYER_TYPE}?crs={self.WGS84_CRS}", operation, "memory"
+        )
+        self.setup_layer(layer, data, operation, intended_use)
+        return layer
+
     def build_result_layer(
         self,
         data: dict[str, Any],
@@ -322,10 +342,10 @@ class PlacesFunctions(ServiceFunctionsBase):
         intended_use: str | None = None,
     ) -> QgsVectorLayer:
         """
-        Builds a styled, unregistered point layer from search results.
+        Builds a styled point layer without adding it to the project.
 
-        The layer is not added to the project, so it can be built in a
-        Processing worker thread and copied to the algorithm output.
+        The Processing algorithms build their results in a worker thread and
+        copy them to the algorithm output, so they cannot use ``setup_layer``.
         """
         if intended_use != "Storage":
             raise ValueError(
@@ -340,6 +360,26 @@ class PlacesFunctions(ServiceFunctionsBase):
         self.apply_label_style(layer)
         self.record_layer_source(layer, operation, intended_use)
         return layer
+
+    def setup_layer(
+        self,
+        layer: QgsVectorLayer,
+        data: dict[str, Any],
+        operation: str,
+        intended_use: str | None = None,
+    ) -> None:
+        """Populates, styles, and adds the point layer to the project."""
+        if intended_use != "Storage":
+            raise ValueError(
+                "Places results can only be added to QGIS after a Storage request."
+            )
+        self.add_attributes(layer)
+        self.add_features(layer, data, operation)
+        self.apply_layer_style(layer)
+        self.apply_label_style(layer)
+        self.record_layer_source(layer, operation, intended_use)
+        layer.triggerRepaint()
+        QgsProject.instance().addMapLayer(layer)
 
     def add_attributes(self, layer: QgsVectorLayer) -> None:
         """Adds place-result fields to the layer."""
@@ -444,3 +484,251 @@ class PlacesFunctions(ServiceFunctionsBase):
             self.PROPERTY_RETRIEVED_AT,
             datetime.now(timezone.utc).isoformat(timespec="seconds"),
         )
+
+    def is_places_layer(self, layer: Any) -> bool:
+        """Returns whether the layer can be enriched with place details."""
+        if not isinstance(layer, QgsVectorLayer) or sip.isdeleted(layer):
+            return False
+        marker = layer.customProperty(self.PROPERTY_MARKER)
+        if marker not in (True, 1, "true", "1"):
+            return False
+        try:
+            schema_version = int(layer.customProperty(self.PROPERTY_SCHEMA_VERSION))
+        except (TypeError, ValueError):
+            return False
+        if schema_version != self.SCHEMA_VERSION:
+            return False
+        fields = layer.fields()
+        for name, field_type in self.RESULT_FIELDS:
+            index = fields.indexOf(name)
+            if index < 0 or fields.field(index).type() != field_type:
+                return False
+        return True
+
+    def fetch_selected_feature_details(
+        self,
+        layer: Any,
+        political_view: str | None = None,
+        language: str | None = None,
+        intended_use: str | None = None,
+        should_cancel: Callable[[], bool] | None = None,
+        targets: list[tuple[int, str]] | None = None,
+        credentials: tuple[str, str] | None = None,
+    ) -> dict[int, dict[str, str]]:
+        """Fetches GetPlace values without changing the layer."""
+        if targets is None:
+            targets = self.enrichment_targets(layer)
+        self._validate_enrichment_state(layer, targets)
+        if credentials is None:
+            credentials = self.configuration_handler.get_credentials()
+
+        values_by_feature: dict[int, dict[str, str]] = {}
+        details_by_place_id: dict[str, dict[str, Any]] = {}
+        for feature_id, place_id in targets:
+            self._raise_if_cancelled(should_cancel)
+            if not place_id:
+                continue
+
+            detail = details_by_place_id.get(place_id)
+            if detail is None:
+                self._validate_enrichment_state(layer, targets)
+                try:
+                    detail = self.get_place(
+                        place_id,
+                        list(self.ENRICH_FEATURES),
+                        political_view,
+                        language,
+                        intended_use,
+                        credentials=credentials,
+                    )
+                except RuntimeError as error:
+                    if should_cancel is not None and should_cancel():
+                        raise PlacesOperationCancelledError(
+                            "The GetPlace request was cancelled."
+                        ) from error
+                    raise
+                self._raise_if_cancelled(should_cancel)
+                self._validate_enrichment_state(layer, targets)
+                details_by_place_id[place_id] = detail
+
+            values_by_feature[feature_id] = {
+                self.FIELD_PHONE: first_contact(detail, "Phones"),
+                self.FIELD_WEBSITE: first_contact(detail, "Websites"),
+                self.FIELD_OPENING_HOURS: opening_hours(detail),
+                self.FIELD_TIMEZONE: time_zone_name(detail),
+            }
+
+        self._raise_if_cancelled(should_cancel)
+        self._validate_enrichment_state(layer, targets)
+        return values_by_feature
+
+    @staticmethod
+    def _raise_if_cancelled(
+        should_cancel: Callable[[], bool] | None,
+    ) -> None:
+        """Stops the current operation when the dialog requested cancellation."""
+        if should_cancel is not None and should_cancel():
+            raise PlacesOperationCancelledError("The Places operation was cancelled.")
+
+    def apply_feature_details(
+        self, layer: QgsVectorLayer, values_by_feature: dict[int, dict[str, str]]
+    ) -> int:
+        """Applies fetched values as one undoable layer edit command."""
+        if sip.isdeleted(layer):
+            raise PlacesOperationCancelledError("The Places layer was closed.")
+        if not self.is_places_layer(layer):
+            raise ValueError("The active layer is not a Places result layer.")
+        self._validate_detail_field_types(layer)
+        if not values_by_feature:
+            return 0
+        for feature_id in values_by_feature:
+            if not layer.getFeature(feature_id).isValid():
+                raise PlacesOperationCancelledError(
+                    "A selected Places feature was removed before details were applied."
+                )
+
+        started_editing = False
+        if not layer.isEditable():
+            if not layer.startEditing():
+                raise RuntimeError("The Places layer could not enter edit mode.")
+            started_editing = True
+
+        layer.beginEditCommand("Apply Amazon Location place details")
+        try:
+            self._add_detail_fields(layer)
+            self._set_detail_values(layer, values_by_feature)
+        except Exception:
+            layer.destroyEditCommand()
+            if started_editing:
+                layer.rollBack()
+            raise
+
+        layer.endEditCommand()
+        layer.triggerRepaint()
+        return len(values_by_feature)
+
+    def _add_detail_fields(self, layer: QgsVectorLayer) -> None:
+        """Adds any detail fields that are missing from an editable layer."""
+        self._validate_detail_field_types(layer)
+        for name in self.DETAIL_FIELDS:
+            missing = layer.fields().indexOf(name) < 0
+            if missing and not layer.addAttribute(QgsField(name, QVariant.String)):
+                raise RuntimeError(f"Could not add the {name} field.")
+        layer.updateFields()
+
+    @staticmethod
+    def _set_detail_values(
+        layer: QgsVectorLayer, values_by_feature: dict[int, dict[str, str]]
+    ) -> None:
+        """Writes fetched detail values to the edit buffer."""
+        for feature_id, values in values_by_feature.items():
+            for name, value in values.items():
+                field_index = layer.fields().indexOf(name)
+                changed = field_index >= 0 and layer.changeAttributeValue(
+                    feature_id, field_index, value
+                )
+                if not changed:
+                    raise RuntimeError(
+                        f"Could not update {name} for feature {feature_id}."
+                    )
+
+    def enrich_selected_features(
+        self,
+        layer: Any,
+        political_view: str | None = None,
+        language: str | None = None,
+        intended_use: str | None = None,
+        should_cancel: Callable[[], bool] | None = None,
+    ) -> int:
+        """Fetches Storage GetPlace values and applies them without partial updates."""
+        if intended_use != "Storage":
+            raise ValueError(
+                "GetPlace details can only be applied after a Storage request."
+            )
+        targets = self.enrichment_targets(layer)
+        values = self.fetch_selected_feature_details(
+            layer,
+            political_view,
+            language,
+            intended_use,
+            should_cancel,
+            targets,
+        )
+        self._raise_if_cancelled(should_cancel)
+        return self.apply_feature_details(layer, values)
+
+    def enrichment_targets(self, layer: Any) -> list[tuple[int, str]]:
+        """
+        Validates the layer and selection for Update Selected Details.
+
+        Returns ``(feature id, PlaceId)`` pairs for the selected features, and
+        raises ``ValueError`` when the layer or selection cannot be enriched.
+        """
+        if not self.is_places_layer(layer):
+            raise ValueError(
+                "The active layer is not a Places result layer. "
+                "Run a Places search first."
+            )
+        if layer.providerType() != "memory":
+            raise ValueError(
+                "Update Selected Details only supports the temporary layers created "
+                "by this plugin."
+            )
+        self._validate_detail_field_types(layer)
+        selected = layer.selectedFeatures()
+        if not selected:
+            raise ValueError("Select one or more features to enrich.")
+        targets = [
+            (feature.id(), str(feature[self.FIELD_PLACE_ID] or ""))
+            for feature in selected
+        ]
+        if any(not place_id for _, place_id in targets):
+            raise ValueError("One or more selected features have no PlaceId value.")
+        unique_place_ids = {str(place_id) for _, place_id in targets}
+        if len(unique_place_ids) > self.MAX_ENRICH_FEATURES:
+            raise ValueError(
+                f"{len(unique_place_ids)} unique places are selected. "
+                "Update Selected Details "
+                "sends one billable Storage request per unique PlaceId; "
+                "select at most "
+                f"{self.MAX_ENRICH_FEATURES} unique places."
+            )
+        return targets
+
+    def _validate_enrichment_targets(
+        self, layer: Any, targets: list[tuple[int, str]]
+    ) -> None:
+        """Ensures a frozen GetPlace target list still matches the layer."""
+        if not self.is_places_layer(layer):
+            raise PlacesOperationCancelledError("The Places layer was closed.")
+        for feature_id, place_id in targets:
+            feature = layer.getFeature(feature_id)
+            if not feature.isValid():
+                raise PlacesOperationCancelledError(
+                    "A selected Places feature was removed during the detail update."
+                )
+            current_place_id = str(feature[self.FIELD_PLACE_ID] or "")
+            if current_place_id != place_id:
+                raise PlacesOperationCancelledError(
+                    "A selected PlaceId changed during the detail update."
+                )
+
+    def _validate_enrichment_state(
+        self,
+        layer: Any,
+        targets: list[tuple[int, str]],
+    ) -> None:
+        """Checks that frozen GetPlace targets are still valid to request."""
+        self._validate_enrichment_targets(layer, targets)
+        self._validate_detail_field_types(layer)
+
+    def _validate_detail_field_types(self, layer: QgsVectorLayer) -> None:
+        """Rejects detail fields whose existing type cannot store text values."""
+        fields = layer.fields()
+        for name in self.DETAIL_FIELDS:
+            index = fields.indexOf(name)
+            if index >= 0 and fields.field(index).type() != QVariant.String:
+                raise ValueError(
+                    f"The existing {name} field must be a text field before "
+                    "updating details."
+                )

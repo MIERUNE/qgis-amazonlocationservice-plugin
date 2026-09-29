@@ -36,8 +36,8 @@ Plugins can also be installed by loading a [zip file](https://github.com/MIERUNE
 
 - `Config`: Set the region and API key
 - `Maps`: Map display function
-- `Places`: Search and geocoding functions (Processing algorithms)
-- `Routes`: Routing function (Processing algorithms)
+- `Places`: Search and geocoding functions
+- `Routes`: Routing function
 - `Terms`: Display Terms of Use page
 
 ### Config Function
@@ -74,37 +74,56 @@ Plugins can also be installed by loading a [zip file](https://github.com/MIERUNE
 
 ※ As of August 2026, `Buildings3D` and `Terrain3D` are not supported.
 
-### Processing Algorithms
+### Places Function
 
-The Places and Routes functions are Processing algorithms of the `Amazon Location Service` provider in the Processing Toolbox, so they also work in batch processing, the Graphical Modeler, and `qgis_process`.
+![places](img/places.gif)
 
-1. Choose a function from the `Places` / `Routes` menu (or toolbar button), or open `Amazon Location Service` in the Processing Toolbox
-2. Fill in the parameters. Point parameters can be picked on the map or entered in any CRS; they are sent as WGS 84
-3. Click `Run`
-4. The results are added as output layers (temporary layers or saved files)
+1. Click the `Places` menu
+2. Choose a function in `Select Function`
+3. Fill in the parameters of the selected function
+4. (Optional or required) Click `Get Location` and click a point on the map
+5. Click the search button
+6. Results are added as layers, and the dialog stays open so you can run another operation
 
-The estimated pricing bucket, the reported pricing bucket, notices, and data attributions are written to the Processing log. There is no confirmation dialog before a request, so check the inputs of `CalculateIsolines` (billed per threshold) and `CalculateRouteMatrix` (billed per origin x destination pair).
+Available functions:
 
-#### Places
-
-- `SearchText`: Searches for places by free text. A bias position is required. It also supports a `Countries` filter and `Travel Mode` (Car / Scooter / Truck). An advanced option fetches up to five result pages (one request per page).
+- `SearchText`: Searches for places by free text. A bias position is required. It also supports a `Countries` filter and `Travel Mode` (Car / Scooter / Truck).
 - `Geocode`: Converts an address into coordinates. Optional bias position, `Countries` filter, `Address Names` mode, and `Postal Code Mode`.
-- `ReverseGeocode`: Converts a position into the nearest address(es). Requires a position; optional `QueryRadius` in meters (0 = unset).
-- `SearchNearby`: Searches for points of interest around a position. Requires a position and a `QueryRadius` in meters. An advanced option fetches up to five result pages.
-- `GetPlace (add place details)`: Copies a point layer with a `PlaceId` field and adds `Phone` / `Website` / `OpeningHours` / `TimeZone`. Each unique PlaceId sends one request (at most 25). Use "Selected features only" to limit the input.
-
-Every Places request is sent with `IntendedUse=Storage`.
+- `ReverseGeocode`: Converts a clicked position into the nearest address(es). Requires a position; optional `QueryRadius` in meters (0 = unset).
+- `SearchNearby`: Searches for points of interest around a clicked position. Requires a position and a `QueryRadius` in meters.
 
 ※ As of August 2026, `Suggest` and `Autocomplete` are not supported.
 
-#### Routes
+### Routes Function
 
-- `CalculateRoutes`: Calculates a route between a start and end point. Supports waypoints (a point layer sorted by an order field), `Travel Mode`, `Optimize For`, `Avoid`, a departure or arrival time, and a Transit mode filter. The route summary table is an optional output.
-- `CalculateIsolines`: Calculates the area reachable within a time (minutes) or distance (km) from a specified point. Supports direction, `Travel Mode`, and up to five thresholds.
-- `SnapToRoads`: Snaps a GPS trace from a point or multipoint layer to roads. Supports `ID` / `Order` / `Timestamp` / `Heading` / `Speed` fields and `Snap Radius`. The confidence points are an optional output.
-- `CalculateRouteMatrix`: Calculates distances and durations in bulk between two point layers. Results are output as a table, with optional straight OD lines (at most 100 pairs).
+![routes](img/routes.gif)
+
+1. Click the `Routes` menu
+2. Choose a function in `Select Function`
+3. Fill in the parameters of the selected function
+4. (Optional or required) Click `Get Location` and click a point on the map
+5. Click the run button
+6. Results are added as layers, and the dialog stays open so you can run another operation
+
+Available functions:
+
+- `CalculateRoutes`: Calculates a route between a start and end point. Supports waypoints, `Travel Mode`, `Optimize For`, `Avoid`, and a departure or arrival time.
+- `CalculateIsolines`: Calculates the area reachable within a time or distance from a specified point. Supports direction, `Travel Mode`, and up to five thresholds.
+- `SnapToRoads`: Snaps a GPS trace from a point or multipoint layer to roads. Supports `Timestamp` / `Heading` / `Speed` fields and `Snap Radius`.
+- `CalculateRouteMatrix`: Calculates distances and durations in bulk between two point layers. Results are output as a table, with optional straight OD lines.
 
 ※ As of August 2026, `OptimizeWaypoints` is not supported.
+
+### Processing Algorithms
+
+The same Places and Routes operations are also available as Processing algorithms of the `Amazon Location Service` provider in the Processing Toolbox, so they can be used in batch processing, the Graphical Modeler, and `qgis_process`. They use the region and API key set in `Config`.
+
+- Places: `SearchText`, `Geocode`, `ReverseGeocode`, `SearchNearby`, `GetPlace (add place details)`
+- Routes: `CalculateRoutes`, `CalculateIsolines`, `SnapToRoads`, `CalculateRouteMatrix`
+
+Point parameters can be picked on the map or entered in any CRS; they are sent as WGS 84. `GetPlace` writes a copy of a point layer with a `PlaceId` field and adds `Phone` / `Website` / `OpeningHours` / `TimeZone` (at most 25 unique PlaceIds). `SearchText` and `SearchNearby` can fetch up to five result pages.
+
+Unlike the dialogs, the algorithms do not ask for billing confirmation: the estimated pricing bucket, the reported pricing bucket, notices, and data attributions are written to the Processing log.
 
 ### Terms Function
 

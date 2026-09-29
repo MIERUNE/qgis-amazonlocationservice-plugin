@@ -12,11 +12,16 @@ from location_service.functions.routes_requests import (
 from location_service.tests import HAS_QGIS
 
 if HAS_QGIS:
+    import qgis.utils
+
     from location_service.functions.routes import RoutesFunctions, major_road_names
     from location_service.functions.routes_results import (
         major_road_names as parse_major_road_names,
     )
 
+    HAS_IFACE = qgis.utils.iface is not None
+else:
+    HAS_IFACE = False
 
 CREDENTIALS = ("ap-northeast-1", "v1.public.test")  # pragma: allowlist secret
 # ap-southeast-1 is served by GrabMaps, which offers a smaller feature set.
@@ -164,6 +169,40 @@ class TestRegionPreflight(unittest.TestCase):
         routes.request_routes(_route_options(), credentials=GRAB_CREDENTIALS)
 
         routes.api_handler.send_json_post_request.assert_called_once()
+
+
+@unittest.skipUnless(HAS_IFACE, "A running QGIS iface is required")
+class TestRoutesUi(unittest.TestCase):
+    """Tests route UI behavior around nested credential prompts."""
+
+    def setUp(self):
+        from location_service.ui.routes.routes import RoutesUi
+
+        self.dialog = RoutesUi()
+
+    def tearDown(self):
+        self.dialog.deleteLater()
+
+    def test_does_not_send_after_credentials_are_cancelled(self):
+        self.dialog.st_lon_lineEdit.setText("139.7")
+        self.dialog.st_lat_lineEdit.setText("35.6")
+        self.dialog.ed_lon_lineEdit.setText("139.8")
+        self.dialog.ed_lat_lineEdit.setText("35.7")
+        routes = Mock()
+
+        def cancel_during_credentials():
+            self.dialog._cancelled = True
+            return CREDENTIALS
+
+        routes.configuration_handler.get_credentials.side_effect = (
+            cancel_during_credentials
+        )
+        self.dialog.routes = routes
+
+        self.dialog._run()
+
+        routes.configuration_handler.get_credentials.assert_called_once()
+        routes.request_routes.assert_not_called()
 
 
 if __name__ == "__main__":

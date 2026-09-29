@@ -1,8 +1,8 @@
 import unittest
 
-from location_service.functions.places_capabilities import parse_language
 from location_service.functions.places_requests import parse_country_codes
 from location_service.functions.routes_requests import parse_thresholds
+from location_service.ui.places.constants import parse_language
 
 
 class TestParseThresholds(unittest.TestCase):

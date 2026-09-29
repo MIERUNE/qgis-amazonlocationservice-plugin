@@ -20,7 +20,6 @@ from qgis.core import (
 )
 from qgis.PyQt.QtCore import QVariant
 
-from ..functions import places_capabilities as capabilities
 from ..functions.places import (
     PlacesFunctions,
     first_contact,
@@ -30,6 +29,7 @@ from ..functions.places import (
 from ..functions.places_requests import MAX_RADIUS, MAX_RESULTS, parse_country_codes
 from ..functions.places_storage import drawable_result_items
 from ..ui.maps.constants import POLITICAL_VIEWS
+from ..ui.places import constants as capabilities
 from . import compat
 from .base import WGS84, LocationServiceAlgorithm
 from .inputs import field_text
