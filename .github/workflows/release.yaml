@@ -17,33 +17,46 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Validate release tag
+      - name: Resolve version from release tag
         run: |
-          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?(\+[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
             printf 'Invalid release tag format: %s\n' "$RELEASE_TAG" >&2
             exit 1
           fi
-          plugin_version="$(sed -n 's/^version=//p' "$PLUGIN_NAME/metadata.txt")"
-          if [[ "$RELEASE_TAG" != "v$plugin_version" ]]; then
-            printf 'Release tag %s does not match plugin version %s\n' \
-              "$RELEASE_TAG" "$plugin_version" >&2
-            exit 1
-          fi
+          # Keep metadata versions without the "v" prefix, as in past releases.
+          echo "PLUGIN_VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
+
+      - name: Create Plugin Directory
+        run: |
+          mkdir dist
+          git archive --format=tar HEAD "$PLUGIN_NAME" \
+            ":(exclude)$PLUGIN_NAME/tests" | tar -x -C dist
+
+      - name: Write version to metadata.txt
+        run: |
+          sed -i "s/^version=.*/version=$PLUGIN_VERSION/" "dist/$PLUGIN_NAME/metadata.txt"
+          grep -qx "version=$PLUGIN_VERSION" "dist/$PLUGIN_NAME/metadata.txt"
+          cat "dist/$PLUGIN_NAME/metadata.txt"
 
       - name: Create Archive
         run: |
-          archive_name="${PLUGIN_NAME}-${RELEASE_TAG}.zip"
-          git archive \
-            --format=zip \
-            --output="$archive_name" \
-            HEAD \
-            "$PLUGIN_NAME" \
-            ":(exclude)$PLUGIN_NAME/tests" \
-            ":(exclude)$PLUGIN_NAME/test_suite.py"
+          cd dist
+          zip -r "../$PLUGIN_NAME.zip" "$PLUGIN_NAME"
 
       - name: Upload release asset
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          archive_name="${PLUGIN_NAME}-${RELEASE_TAG}.zip"
-          gh release upload "$RELEASE_TAG" "$archive_name"
+          gh release upload "$RELEASE_TAG" "$PLUGIN_NAME.zip" --clobber
+
+      - name: Upload to plugins.qgis.org
+        # Pre-releases stay on GitHub only.
+        if: ${{ !github.event.release.prerelease }}
+        env:
+          QGIS_PLUGIN_TOKEN: ${{ secrets.QGIS_PLUGIN_TOKEN }}
+        run: |
+          curl -X POST \
+            "https://plugins.qgis.org/plugins/api/$PLUGIN_NAME/version/add/" \
+            -H "Authorization: Bearer $QGIS_PLUGIN_TOKEN" \
+            -F "package=@$PLUGIN_NAME.zip" \
+            --fail

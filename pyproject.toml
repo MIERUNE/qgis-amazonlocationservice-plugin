@@ -17,6 +17,9 @@ dev = [
     "ruff>=0.14.0",
 ]
 
+[tool.pytest.ini_options]
+testpaths = ["location_service/tests"]
+
 [tool.ruff]
 target-version = "py39"
 
@@ -41,5 +44,5 @@ select = [
 ]
 ignore = [
     "N802",  # QGIS and Qt APIs require camelCase names.
-    "PT027",  # Tests use unittest assertions under the QGIS test runner.
+    "PT027",  # Tests are unittest.TestCase classes collected by pytest.
 ]

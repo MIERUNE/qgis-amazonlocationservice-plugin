@@ -1,6 +1,5 @@
 import configparser
 import os
-import re
 import unittest
 
 
@@ -41,26 +40,6 @@ class TestInit(unittest.TestCase):
             )
 
             assert expectation in dict(metadata), message
-
-    def test_version_matches_pyproject(self):
-        # CI imports through a symlink; pyproject.toml is beside the real path.
-        plugin_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-        pyproject_path = os.path.join(os.path.dirname(plugin_dir), "pyproject.toml")
-        if not os.path.exists(pyproject_path):
-            self.skipTest("pyproject.toml is not present (installed from zip)")
-
-        parser = configparser.ConfigParser()
-        parser.read(os.path.join(plugin_dir, "metadata.txt"))
-        metadata_version = parser.get("general", "version")
-
-        # QGIS 3.34 uses Python 3.9, which does not provide tomllib.
-        with open(pyproject_path, encoding="utf-8") as f:
-            match = re.search(r'^version\s*=\s*"([^"]+)"', f.read(), re.MULTILINE)
-        assert match, f"No version field found in {pyproject_path}"
-        assert match.group(1) == metadata_version, (
-            f"pyproject.toml version {match.group(1)} does not match "
-            f"metadata.txt version {metadata_version}"
-        )
 
 
 if __name__ == "__main__":
