@@ -4,6 +4,7 @@ import math
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from itertools import pairwise
 from typing import Any
 
 from .payload import prune_payload
@@ -429,7 +430,7 @@ def _validate_trace_points(points: tuple[TracePoint, ...]) -> list[dict[str, Any
         )
 
     total = 0.0
-    for previous, current in zip(points, points[1:]):
+    for previous, current in pairwise(points):
         total += haversine_meters(previous.position, current.position)
     if total > MAX_TRACE_DISTANCE_METERS * TRACE_DISTANCE_SAFETY_FACTOR:
         raise ValueError(

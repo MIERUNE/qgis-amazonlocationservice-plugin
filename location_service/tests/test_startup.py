@@ -158,7 +158,7 @@ class TestPluginStartup(unittest.TestCase):
             )
             top_bottom = max(
                 position.y() + button.height()
-                for position, button in zip(top_positions, top_buttons)
+                for position, button in zip(top_positions, top_buttons, strict=True)
             )
             assert top_bottom <= min(position.y() for position in bottom_positions)
             for button in (*top_buttons, *bottom_buttons):

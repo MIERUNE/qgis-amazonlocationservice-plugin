@@ -1,5 +1,4 @@
 import os
-from typing import Optional
 
 from qgis.PyQt import uic
 from qgis.PyQt.QtCore import pyqtSignal
@@ -32,7 +31,7 @@ class ConfigUi(QDialog):
     KEY_REGION = ConfigurationHandler.KEY_REGION
     KEY_APIKEY = ConfigurationHandler.KEY_APIKEY
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         """Loads the dialog and connects its controls."""
         super().__init__(parent)
         uic.loadUi(self.UI_PATH, self)

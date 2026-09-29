@@ -1,7 +1,6 @@
 import html
 import math
 import os
-from typing import Optional
 from urllib.parse import urlparse
 
 from qgis.core import (
@@ -103,7 +102,7 @@ class RoutesUi(QDialog):
 
     UI_PATH = os.path.join(os.path.dirname(__file__), "routes.ui")
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         """Loads the dialog, connects its controls, and populates the options."""
         super().__init__(parent)
         uic.loadUi(self.UI_PATH, self)

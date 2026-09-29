@@ -1,5 +1,3 @@
-from typing import Optional
-
 from qgis.PyQt.QtCore import QSettings
 
 
@@ -26,8 +24,8 @@ class LocalizationPreferences:
 
     def save(
         self,
-        language: Optional[str],
-        political_view: Optional[str],
+        language: str | None,
+        political_view: str | None,
     ) -> None:
         """Saves the language and political view API values."""
         settings = QSettings()

@@ -135,7 +135,7 @@ b. Layer routes from HERE on top of a map from another third-party provider, or 
 ### Requirements
 
 - [uv](https://docs.astral.sh/uv/)
-- QGIS 3.34 or later (including QGIS 4.x)
+- QGIS 3.44 or later (including QGIS 4.x)
 
 ### Setup
 

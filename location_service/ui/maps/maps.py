@@ -1,5 +1,4 @@
 import os
-from typing import Optional
 
 from qgis.PyQt import uic
 from qgis.PyQt.QtWidgets import QComboBox, QDialog, QWidget
@@ -36,7 +35,7 @@ class MapsUi(QDialog):
 
     UI_PATH = os.path.join(os.path.dirname(__file__), "maps.ui")
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         """Loads the dialog, connects its controls, and populates map options."""
         super().__init__(parent)
         uic.loadUi(self.UI_PATH, self)
