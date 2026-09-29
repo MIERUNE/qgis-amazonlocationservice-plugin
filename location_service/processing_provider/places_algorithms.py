@@ -65,9 +65,10 @@ class PlacesAlgorithm(LocationServiceAlgorithm):
     POLITICAL_VIEW = "POLITICAL_VIEW"
     MAX_RESULTS = "MAX_RESULTS"
     PAGES = "PAGES"
-    NEXT_TOKEN = "NEXT_TOKEN"
+    # Processing IDs, not credentials.
+    NEXT_TOKEN = "NEXT_TOKEN"  # nosec B105
     OUTPUT = "OUTPUT"
-    NEXT_PAGE_TOKEN = "NEXT_PAGE_TOKEN"
+    NEXT_PAGE_TOKEN = "NEXT_PAGE_TOKEN"  # nosec B105
 
     def add_localization_parameters(self) -> None:
         """Adds the Language and Political View parameters."""
@@ -208,7 +209,8 @@ class PlacesAlgorithm(LocationServiceAlgorithm):
         token = self.parameterAsString(parameters, self.NEXT_TOKEN, context) or None
         items: list[dict[str, Any]] = []
         seen: set[str] = set()
-        next_page_token = ""
+        # An empty cursor means there is no next page.
+        next_page_token = ""  # nosec B105
         for page in range(max_pages):
             if page:
                 feedback.pushInfo(f"Requesting result page {page + 1}.")

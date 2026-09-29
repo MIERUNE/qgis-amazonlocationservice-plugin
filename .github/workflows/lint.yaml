@@ -35,3 +35,6 @@ jobs:
 
       - name: Format with ruff
         run: uv run --locked --python 3.10 ruff format . --check --diff
+
+      - name: Security check with Bandit
+        run: uv run --locked --python 3.10 bandit -c pyproject.toml -l -r location_service
