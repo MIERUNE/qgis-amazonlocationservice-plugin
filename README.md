@@ -119,6 +119,21 @@ Available functions:
 1. Click the `Terms` menu
 2. The Terms of Use page will be displayed in your browser.
 
+### Processing Function
+
+The Places and Routes functions are also available in the Processing Toolbox.
+
+1. Open the QGIS Processing Toolbox
+2. Choose a function under `Amazon Location Service` → `Places` or `Routes`
+3. Set the parameters and output destination
+4. Click the run button
+5. Results are output as layers or tables
+
+Available functions:
+
+- Places: `SearchText`, `Geocode`, `ReverseGeocode`, `SearchNearby`, `GetPlace (add place details)`
+- Routes: `CalculateRoutes`, `CalculateIsolines`, `SnapToRoads`, `CalculateRouteMatrix`
+
 ### Terms
 
 [AWS Service Terms](https://aws.amazon.com/jp/service-terms)

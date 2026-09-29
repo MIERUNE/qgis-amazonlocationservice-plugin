@@ -19,6 +19,14 @@ if HAS_QGIS:
         result_position,
         time_zone_name,
     )
+    from location_service.functions.places_storage import drawable_result_items
+    from location_service.processing_provider.places_algorithms import (
+        GetPlaceAlgorithm,
+    )
+    from location_service.processing_provider.runner import AlgorithmRun
+    from location_service.ui.places.details import fetch_detail_values
+    from location_service.utils.configuration_handler import ConfigurationHandler
+    from location_service.utils.external_api_handler import ExternalApiHandler
 
     HAS_IFACE = qgis.utils.iface is not None
 else:
@@ -239,16 +247,26 @@ class TestPlacesFeatures(unittest.TestCase):
         )
         assert list(layer.getFeatures()) == []
 
-    def test_rejects_single_use_layer_creation(self):
+    def test_build_result_layer_rejects_single_use_results(self):
         places = PlacesFunctions.__new__(PlacesFunctions)
-        layer = QgsVectorLayer("Point?crs=EPSG:4326", "test", "memory")
         with self.assertRaisesRegex(ValueError, "Storage request"):
-            places.setup_layer(layer, {"ResultItems": []}, "SearchText")
-        assert layer.fields().isEmpty()
+            places.build_result_layer({"ResultItems": []}, "SearchText")
+
+    def test_build_result_layer_is_styled_and_not_registered(self):
+        places = PlacesFunctions.__new__(PlacesFunctions)
+        layer = places.build_result_layer(
+            {"ResultItems": [{"Title": "A", "Position": [139.7, 35.6]}]},
+            "SearchText",
+            intended_use="Storage",
+        )
+        assert layer.name() == "SearchText"
+        assert layer.featureCount() == 1
+        assert layer.labelsEnabled()
+        assert layer.customProperty(PlacesFunctions.PROPERTY_INTENDED_USE) == "Storage"
+        assert QgsProject.instance().mapLayer(layer.id()) is None
 
     def test_allows_japan_layer_creation(self):
         places = PlacesFunctions.__new__(PlacesFunctions)
-        layer = QgsVectorLayer("Point?crs=EPSG:4326", "test", "memory")
         result = {
             "ResultItems": [
                 {
@@ -257,27 +275,19 @@ class TestPlacesFeatures(unittest.TestCase):
                 }
             ]
         }
-        places.setup_layer(layer, result, "SearchText", intended_use="Storage")
-        try:
-            features = list(layer.getFeatures())
-            assert len(features) == 1
-            assert features[0][PlacesFunctions.FIELD_COUNTRY_CODE] == "JPN"
-        finally:
-            QgsProject.instance().removeMapLayer(layer.id())
+        layer = places.build_result_layer(result, "SearchText", intended_use="Storage")
+        features = list(layer.getFeatures())
+        assert len(features) == 1
+        assert features[0][PlacesFunctions.FIELD_COUNTRY_CODE] == "JPN"
 
     def test_allows_unknown_country_layer_creation(self):
         places = PlacesFunctions.__new__(PlacesFunctions)
-        layer = QgsVectorLayer("Point?crs=EPSG:4326", "test", "memory")
         result = {"ResultItems": [{"Position": [139.7, 35.6]}]}
-        places.setup_layer(layer, result, "SearchText", intended_use="Storage")
-        try:
-            assert len(list(layer.getFeatures())) == 1
-        finally:
-            QgsProject.instance().removeMapLayer(layer.id())
+        layer = places.build_result_layer(result, "SearchText", intended_use="Storage")
+        assert len(list(layer.getFeatures())) == 1
 
     def test_ignores_non_drawable_items_during_layer_creation(self):
         places = PlacesFunctions.__new__(PlacesFunctions)
-        layer = QgsVectorLayer("Point?crs=EPSG:4326", "test", "memory")
         result = {
             "ResultItems": [
                 {"Title": "No point", "Address": None},
@@ -289,11 +299,8 @@ class TestPlacesFeatures(unittest.TestCase):
             ]
         }
 
-        places.setup_layer(layer, result, "SearchText", intended_use="Storage")
-        try:
-            assert len(list(layer.getFeatures())) == 1
-        finally:
-            QgsProject.instance().removeMapLayer(layer.id())
+        layer = places.build_result_layer(result, "SearchText", intended_use="Storage")
+        assert len(list(layer.getFeatures())) == 1
 
 
 @unittest.skipUnless(HAS_QGIS, "QGIS runtime is required")
@@ -397,9 +404,40 @@ class TestEnrichSelectedFeatures(unittest.TestCase):
     def setUp(self):
         self.fetched = []
 
+    def _fetch(self, places, layer, intended_use="Storage", targets=None, run=None):
+        """Runs the dialog's GetPlace algorithm path for the selected features."""
+        if targets is None:
+            targets = places.enrichment_targets(layer)
+
+        # The algorithm creates its own facade; route its requests to the
+        # fake GetPlace of this test.
+        def get_place(_self, *args, **kwargs):
+            return places.get_place(*args, **kwargs)
+
+        with (
+            patch.object(PlacesFunctions, "get_place", get_place),
+            patch.object(
+                ConfigurationHandler,
+                "get_credentials",
+                return_value=_FakeCredentials.get_credentials(),
+            ),
+        ):
+            return fetch_detail_values(
+                places,
+                layer,
+                targets,
+                run or AlgorithmRun(GetPlaceAlgorithm),
+                intended_use=intended_use,
+            )
+
+    def _enrich(self, places, layer, intended_use="Storage", targets=None, run=None):
+        """Fetches the details and applies them as one layer edit."""
+        values = self._fetch(places, layer, intended_use, targets, run)
+        return places.apply_feature_details(layer, values)
+
     def test_enriches_selected_features(self):
         places, layer = self._selected_layer()
-        count = places.enrich_selected_features(layer, intended_use="Storage")
+        count = self._enrich(places, layer)
         assert count == 2
         phones = {f["PlaceId"]: f["Phone"] for f in layer.getFeatures()}
         assert phones == {"place-1": "03-1111", "place-2": "03-2222"}
@@ -411,20 +449,20 @@ class TestEnrichSelectedFeatures(unittest.TestCase):
         places = PlacesFunctions.__new__(PlacesFunctions)
         layer = QgsVectorLayer("Point?crs=EPSG:4326", "other", "memory")
         with self.assertRaises(ValueError):
-            places.enrich_selected_features(layer, intended_use="Storage")
+            self._enrich(places, layer)
 
     def test_rejects_unmarked_layer_with_place_id(self):
         places = PlacesFunctions.__new__(PlacesFunctions)
         layer = QgsVectorLayer("Point?crs=EPSG:4326", "other", "memory")
         places.add_attributes(layer)
         with self.assertRaises(ValueError):
-            places.enrich_selected_features(layer, intended_use="Storage")
+            self._enrich(places, layer)
 
     def test_rejects_unknown_layer_schema(self):
         places, layer = self._selected_layer()
         layer.setCustomProperty(PlacesFunctions.PROPERTY_SCHEMA_VERSION, 999)
         with self.assertRaises(ValueError):
-            places.enrich_selected_features(layer, intended_use="Storage")
+            self._enrich(places, layer)
         assert self.fetched == []
 
     def test_rejects_layer_missing_a_required_result_field(self):
@@ -442,7 +480,7 @@ class TestEnrichSelectedFeatures(unittest.TestCase):
     def test_rejects_non_vector_layer(self):
         places = PlacesFunctions.__new__(PlacesFunctions)
         with self.assertRaises(ValueError):
-            places.enrich_selected_features(None, intended_use="Storage")
+            self._enrich(places, None)
 
     def test_deduplicates_place_ids(self):
         result_items = [
@@ -459,7 +497,7 @@ class TestEnrichSelectedFeatures(unittest.TestCase):
         places.get_place = self._fake_get_place
         layer.selectAll()
 
-        count = places.enrich_selected_features(layer, intended_use="Storage")
+        count = self._enrich(places, layer)
 
         # Both features share one request in this direct Storage pass.
         assert count == 2
@@ -471,7 +509,7 @@ class TestEnrichSelectedFeatures(unittest.TestCase):
         places, layer = self._selected_layer()
         assert layer.startEditing()
         try:
-            assert places.enrich_selected_features(layer, intended_use="Storage") == 2
+            assert self._enrich(places, layer) == 2
             assert layer.isEditable()
             assert layer.fields().indexOf(PlacesFunctions.FIELD_PHONE) >= 0
         finally:
@@ -482,12 +520,12 @@ class TestEnrichSelectedFeatures(unittest.TestCase):
         places, layer = self._selected_layer()
         layer.removeSelection()
         with self.assertRaises(ValueError):
-            places.enrich_selected_features(layer, intended_use="Storage")
+            self._enrich(places, layer)
 
     def test_rejects_oversized_selection(self):
         places, layer = self._selected_layer(PlacesFunctions.MAX_ENRICH_FEATURES + 1)
         with self.assertRaisesRegex(ValueError, "billable Storage request"):
-            places.enrich_selected_features(layer, intended_use="Storage")
+            self._enrich(places, layer)
         assert self.fetched == []
 
     def test_allows_many_features_with_one_unique_place_id(self):
@@ -505,19 +543,21 @@ class TestEnrichSelectedFeatures(unittest.TestCase):
         places.get_place = self._fake_get_place
         layer.selectAll()
 
-        assert places.enrich_selected_features(layer, intended_use="Storage") == len(
-            result_items
-        )
+        assert self._enrich(places, layer) == len(result_items)
         assert self.fetched == ["place-1"]
 
     def test_cancel_does_not_change_layer(self):
         places, layer = self._selected_layer()
+        run = AlgorithmRun(GetPlaceAlgorithm)
+
+        def cancel_after_first_request(place_id, *args, **kwargs):
+            self.fetched.append(place_id)
+            run.cancel()
+            return self.DETAILS[place_id]
+
+        places.get_place = cancel_after_first_request
         with self.assertRaises(PlacesOperationCancelledError):
-            places.enrich_selected_features(
-                layer,
-                intended_use="Storage",
-                should_cancel=lambda: len(self.fetched) >= 1,
-            )
+            self._enrich(places, layer, run=run)
         assert len(self.fetched) == 1
         assert layer.fields().indexOf(PlacesFunctions.FIELD_PHONE) >= 0
         assert not layer.isEditable()
@@ -542,12 +582,7 @@ class TestEnrichSelectedFeatures(unittest.TestCase):
             with self.assertRaisesRegex(
                 PlacesOperationCancelledError, "PlaceId changed"
             ):
-                places.fetch_selected_feature_details(
-                    layer,
-                    intended_use="Storage",
-                    targets=targets,
-                    credentials=("us-east-1", "v1.public.test"),
-                )
+                self._fetch(places, layer, targets=targets)
         finally:
             layer.rollBack()
         assert len(self.fetched) == 1
@@ -561,11 +596,7 @@ class TestEnrichSelectedFeatures(unittest.TestCase):
         layer.updateFields()
 
         with self.assertRaisesRegex(ValueError, "Phone field must be a text field"):
-            places.fetch_selected_feature_details(
-                layer,
-                intended_use="Storage",
-                credentials=("us-east-1", "v1.public.test"),
-            )
+            self._fetch(places, layer)
         assert self.fetched == []
 
     def test_detail_field_type_change_stops_before_the_next_request(self):
@@ -586,12 +617,7 @@ class TestEnrichSelectedFeatures(unittest.TestCase):
         places.get_place = add_wrong_detail_field
         try:
             with self.assertRaisesRegex(ValueError, "Phone field must be a text field"):
-                places.fetch_selected_feature_details(
-                    layer,
-                    intended_use="Storage",
-                    targets=targets,
-                    credentials=("us-east-1", "v1.public.test"),
-                )
+                self._fetch(places, layer, targets=targets)
         finally:
             layer.rollBack()
         assert len(self.fetched) == 1
@@ -611,13 +637,13 @@ class TestEnrichSelectedFeatures(unittest.TestCase):
     def test_rejects_single_use_details_before_fetching(self):
         places, layer = self._selected_layer()
         with self.assertRaisesRegex(ValueError, "Storage request"):
-            places.enrich_selected_features(layer)
+            self._enrich(places, layer, intended_use=None)
         assert self.fetched == []
 
     def test_details_can_be_undone_as_one_edit_command(self):
         places, layer = self._selected_layer()
         self._remove_detail_fields(layer)
-        assert places.enrich_selected_features(layer, intended_use="Storage") == 2
+        assert self._enrich(places, layer) == 2
         assert layer.undoStack().canUndo()
         assert layer.fields().indexOf(PlacesFunctions.FIELD_PHONE) >= 0
 
@@ -641,7 +667,7 @@ class TestEnrichSelectedFeatures(unittest.TestCase):
         places.configuration_handler = _FakeCredentials()
         places.get_place = self._fake_get_place
         layer.selectAll()
-        assert places.enrich_selected_features(layer, intended_use="Storage") == 1
+        assert self._enrich(places, layer) == 1
         assert self.fetched == ["place-1"]
 
     def test_allows_unknown_country_details(self):
@@ -658,7 +684,7 @@ class TestEnrichSelectedFeatures(unittest.TestCase):
         places.configuration_handler = _FakeCredentials()
         places.get_place = self._fake_get_place
         layer.selectAll()
-        assert places.enrich_selected_features(layer, intended_use="Storage") == 1
+        assert self._enrich(places, layer) == 1
         assert self.fetched == ["place-1"]
 
     def test_allows_japan_get_place_response(self):
@@ -672,7 +698,7 @@ class TestEnrichSelectedFeatures(unittest.TestCase):
             }
 
         places.get_place = japan_get_place
-        assert places.enrich_selected_features(layer, intended_use="Storage") == 2
+        assert self._enrich(places, layer) == 2
         assert len(self.fetched) == 2
         assert {feature["Phone"] for feature in layer.getFeatures()} == {"03-1234"}
 
@@ -687,7 +713,7 @@ class TestEnrichSelectedFeatures(unittest.TestCase):
             }
 
         places.get_place = unknown_country_get_place
-        assert places.enrich_selected_features(layer, intended_use="Storage") == 2
+        assert self._enrich(places, layer) == 2
         assert len(self.fetched) == 2
         assert {feature["Phone"] for feature in layer.getFeatures()} == {"03-5678"}
 
@@ -704,56 +730,39 @@ class TestEnrichSelectedFeatures(unittest.TestCase):
                     return "us-east-1", "v1.public.snapshot"
                 return "eu-west-1", "v1.public.changed"
 
-        class CapturingApi:
-            def __init__(self):
-                self.urls = []
-
-            def send_json_get_request(self, url):
-                self.urls.append(url)
-                return {"Address": {"Country": {"Code3": "USA"}}}
-
         credentials = ChangingCredentials()
-        api = CapturingApi()
-        places.configuration_handler = credentials
-        places.api_handler = api
-        places.get_place = PlacesFunctions.get_place.__get__(places, PlacesFunctions)
+        urls = []
 
-        values = places.fetch_selected_feature_details(layer, intended_use="Storage")
+        def capture(_handler, url):
+            urls.append(url)
+            return {"Address": {"Country": {"Code3": "USA"}}}
+
+        targets = places.enrichment_targets(layer)
+        with (
+            patch.object(
+                ConfigurationHandler,
+                "get_credentials",
+                side_effect=lambda: credentials.get_credentials(),
+            ),
+            patch.object(ExternalApiHandler, "send_json_get_request", capture),
+        ):
+            values = fetch_detail_values(
+                places,
+                layer,
+                targets,
+                AlgorithmRun(GetPlaceAlgorithm),
+                intended_use="Storage",
+            )
 
         assert len(values) == 2
+        # The algorithm reads the credentials once, before any request.
         assert credentials.calls == 1
-        assert len(api.urls) == 2
-        assert all(
-            urlparse(url).hostname == "places.geo.us-east-1.amazonaws.com"
-            for url in api.urls
-        )
-        assert all("key=v1.public.snapshot" in url for url in api.urls)
-
-    def test_get_details_accepts_a_credentials_snapshot_from_the_caller(self):
-        places, layer = self._selected_layer()
-        places.configuration_handler = Mock()
-        places.api_handler = Mock()
-        places.api_handler.send_json_get_request.return_value = {
-            "Address": {"Country": {"Code3": "USA"}}
-        }
-        places.get_place = PlacesFunctions.get_place.__get__(places, PlacesFunctions)
-
-        places.fetch_selected_feature_details(
-            layer,
-            intended_use="Storage",
-            credentials=("us-west-2", "v1.public.captured"),
-        )
-
-        places.configuration_handler.get_credentials.assert_not_called()
-        urls = [
-            call.args[0]
-            for call in places.api_handler.send_json_get_request.call_args_list
-        ]
         assert len(urls) == 2
         assert all(
-            urlparse(url).hostname == "places.geo.us-west-2.amazonaws.com"
+            urlparse(url).hostname == "places.geo.us-east-1.amazonaws.com"
             for url in urls
         )
+        assert all("key=v1.public.snapshot" in url for url in urls)
 
     def test_rejects_missing_feature_before_apply(self):
         places, layer = self._selected_layer()
@@ -922,16 +931,21 @@ class TestPlacesDialog(unittest.TestCase):
         self.dialog.places.configuration_handler.get_credentials.return_value = (
             credentials
         )
-        self.dialog.places.geocode = Mock(return_value={})
+        geocode = Mock(return_value={})
         self.dialog.gc_text_lineEdit.setText("Tokyo Station")
 
         request = self.dialog._build_request("Geocode", None, 10)
-        self.dialog._send_request(request, "Storage")
+        with (
+            patch.object(
+                ConfigurationHandler, "get_credentials", return_value=credentials
+            ),
+            patch.object(PlacesFunctions, "geocode", geocode),
+        ):
+            self.dialog._send_request(request, "Storage")
 
         assert request["additional_features"] == ["TimeZone"]
-        assert self.dialog.places.geocode.call_args.kwargs["additional_features"] == [
-            "TimeZone"
-        ]
+        assert geocode.call_args.kwargs["additional_features"] == ["TimeZone"]
+        assert geocode.call_args.kwargs["intended_use"] == "Storage"
 
     def test_parse_countries(self):
         assert self.dialog._parse_countries("jp, USA") == ["JP", "USA"]
@@ -953,6 +967,42 @@ class TestPlacesDialog(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "region or API key changed"):
             self.dialog._send_request(request, "Storage")
+
+    @staticmethod
+    def _page_of(result):
+        """Returns a result page like the one the Places algorithm writes."""
+        from location_service.ui.places.places import PlacesPage
+
+        places = PlacesFunctions.__new__(PlacesFunctions)
+        layer = places.build_result_layer(
+            {"ResultItems": drawable_result_items(result)}, "SearchText", "Storage"
+        )
+        return PlacesPage(layer, result.get("NextToken"))
+
+    def _run_page(self, result, token=None):
+        """Sends a request through the real algorithm with a fake response."""
+        credentials = ("ap-northeast-1", "v1.public.test")
+        request = {
+            "function": "SearchText",
+            "position": [139.7, 35.6],
+            "max_results": 10,
+            "language": None,
+            "political_view": None,
+            "political_view_enabled": True,
+            "text": "coffee",
+            "countries": None,
+            "travel_mode": None,
+            "region": credentials[0],
+            "credentials": credentials,
+        }
+        with (
+            patch.object(
+                ConfigurationHandler, "get_credentials", return_value=credentials
+            ),
+            patch.object(PlacesFunctions, "search_text", Mock(return_value=result)),
+            patch.object(self.dialog, "places", PlacesFunctions()),
+        ):
+            return self.dialog._send_request(request, "Storage", token)
 
     @staticmethod
     def _result(place_id="place-1", title="Place", token=None):
@@ -978,12 +1028,12 @@ class TestPlacesDialog(unittest.TestCase):
             "political_view": None,
             "political_view_enabled": True,
         }
-        result = self._result(title="Stored")
-        layer = Mock()
+        page = self._page_of(self._result(title="Stored", token="page-2"))
+        layer = page.layer
+        self.addCleanup(QgsProject.instance().removeMapLayer, layer.id())
         self.dialog._parse_position = Mock(return_value=[139.7, 35.6])
         self.dialog._build_request = Mock(return_value=request)
-        self.dialog._send_request = Mock(return_value=result)
-        self.dialog.places.add_point_layer = Mock(return_value=layer)
+        self.dialog._send_request = Mock(return_value=page)
         self.dialog._set_pagination = Mock()
         self.dialog.localization_preferences = Mock()
         fake_iface = Mock()
@@ -995,12 +1045,43 @@ class TestPlacesDialog(unittest.TestCase):
             self.dialog._search()
 
         self.dialog._send_request.assert_called_once_with(request, "Storage")
-        self.dialog.places.add_point_layer.assert_called_once_with(
-            result,
-            "SearchText",
-            intended_use="Storage",
-        )
+        assert QgsProject.instance().mapLayer(layer.id()) is layer
+        assert layer.name() == "SearchText"
         fake_iface.setActiveLayer.assert_called_once_with(layer)
+        self.dialog._set_pagination.assert_called_once_with(request, layer, "page-2")
+
+    def test_search_runs_the_places_algorithm(self):
+        self.dialog.text_lineEdit.setText(" coffee ")
+        self.dialog.lon_lineEdit.setText("139.7")
+        self.dialog.lat_lineEdit.setText("35.6")
+        credentials = ("ap-northeast-1", "v1.public.test")
+        search_text = Mock(return_value=self._result(token="page-2"))
+        fake_iface = Mock()
+
+        with (
+            patch.object(
+                ConfigurationHandler, "get_credentials", return_value=credentials
+            ),
+            patch.object(PlacesFunctions, "search_text", search_text),
+            patch.object(self.places_module, "iface", fake_iface),
+            patch.object(self.places_module, "push_message"),
+            patch.object(self.places_module, "show_error") as show_error,
+        ):
+            self.dialog._search()
+
+        show_error.assert_not_called()
+        search_text.assert_called_once()
+        args, kwargs = search_text.call_args
+        assert args[:4] == ("coffee", 10, 139.7, 35.6)
+        assert kwargs["intended_use"] == "Storage"
+        assert kwargs["next_token"] is None
+        assert kwargs["credentials"] == credentials
+        (layer,) = [call.args[0] for call in fake_iface.setActiveLayer.call_args_list]
+        self.addCleanup(QgsProject.instance().removeMapLayer, layer.id())
+        assert layer.featureCount() == 1
+        assert self.dialog.places.is_places_layer(layer)
+        assert self.dialog._next_token == "page-2"
+        assert self.dialog.button_load_more.isEnabled()
 
     def test_failed_new_search_keeps_previous_pagination(self):
         previous_request = {"function": "SearchText"}
@@ -1075,11 +1156,7 @@ class TestPlacesDialog(unittest.TestCase):
             "NextToken": "page-3",
         }
 
-        added = self.dialog._append_result_page(
-            layer,
-            {"function": "SearchText"},
-            result,
-        )
+        added = self.dialog._append_result_page(layer, self._run_page(result))
 
         assert added == 2
         assert len(list(layer.getFeatures())) == 3
@@ -1092,16 +1169,14 @@ class TestPlacesDialog(unittest.TestCase):
 
     def test_failed_page_append_clears_pagination(self):
         places, layer = _places_with_layer(self._result("place-1"))
-        places.add_features = Mock(side_effect=RuntimeError("write failed"))
         self.dialog.places = places
         self.dialog._pagination_place_ids = {"place-1"}
         self.dialog._next_token = "page-2"
 
+        self.dialog._new_page_features = Mock(side_effect=RuntimeError("write failed"))
         with self.assertRaisesRegex(RuntimeError, "write failed"):
             self.dialog._append_result_page(
-                layer,
-                {"function": "SearchText"},
-                self._result("place-2", token="page-3"),
+                layer, self._page_of(self._result("place-2", token="page-3"))
             )
 
         assert self.dialog._pagination_place_ids == set()
@@ -1175,7 +1250,6 @@ class TestPlacesDialog(unittest.TestCase):
         credentials = ("ap-northeast-1", "v1.public.test")
         places.configuration_handler = Mock()
         places.configuration_handler.get_credentials.return_value = credentials
-        places.add_features = Mock(side_effect=RuntimeError("write failed"))
         QgsProject.instance().addMapLayer(layer)
         self.addCleanup(QgsProject.instance().removeMapLayer, layer.id())
         self.dialog.places = places
@@ -1188,8 +1262,9 @@ class TestPlacesDialog(unittest.TestCase):
         self.dialog._next_token = "page-2"
         self.dialog._pagination_place_ids = {"place-1"}
         self.dialog._send_request = Mock(
-            return_value=self._result("place-2", token="page-3")
+            return_value=self._page_of(self._result("place-2", token="page-3"))
         )
+        self.dialog._new_page_features = Mock(side_effect=RuntimeError("write failed"))
         self.dialog._report_search_error = Mock()
 
         self.dialog._load_more()
@@ -1226,7 +1301,9 @@ class TestPlacesDialog(unittest.TestCase):
         assert self.dialog.button_load_more.isEnabled()
 
         self.dialog._send_request.side_effect = None
-        self.dialog._send_request.return_value = self._result("place-2", token="page-3")
+        self.dialog._send_request.return_value = self._page_of(
+            self._result("place-2", token="page-3")
+        )
         self.dialog._load_more()
 
         assert self.dialog._send_request.call_count == 2
@@ -1335,7 +1412,6 @@ class TestPlacesDialog(unittest.TestCase):
             self.dialog.refresh_region_capabilities()
             return {feature_id: {PlacesFunctions.FIELD_PHONE: "0123"}}
 
-        service.fetch_selected_feature_details.side_effect = change_region
         self.dialog.places = service
         self.dialog.localization_preferences = Mock()
         fake_iface = Mock()
@@ -1344,6 +1420,9 @@ class TestPlacesDialog(unittest.TestCase):
         with (
             patch.object(self.places_module, "iface", fake_iface),
             patch.object(self.places_module, "push_message"),
+            patch.object(
+                self.places_module, "fetch_detail_values", side_effect=change_region
+            ),
         ):
             self.dialog._enrich()
 
@@ -1360,7 +1439,6 @@ class TestPlacesDialog(unittest.TestCase):
         credentials = ("ap-northeast-1", "v1.public.test")
         service.configuration_handler.get_credentials.return_value = credentials
         service.enrichment_targets.return_value = targets
-        service.fetch_selected_feature_details.return_value = stored_values
         service.apply_feature_details.return_value = 1
         self.dialog.places = service
         self.dialog.localization_preferences = Mock()
@@ -1370,14 +1448,22 @@ class TestPlacesDialog(unittest.TestCase):
         with (
             patch.object(self.places_module, "iface", fake_iface),
             patch.object(self.places_module, "push_message"),
+            patch.object(
+                self.places_module,
+                "fetch_detail_values",
+                return_value=stored_values,
+            ) as fetch,
         ):
             self.dialog._enrich()
 
-        service.fetch_selected_feature_details.assert_called_once()
-        call = service.fetch_selected_feature_details.call_args
+        fetch.assert_called_once()
+        call = fetch.call_args
+        assert call.args[0] is service
+        assert call.args[1] is layer
+        assert call.args[2] == targets
+        assert isinstance(call.args[3], AlgorithmRun)
         assert call.kwargs["intended_use"] == "Storage"
-        assert call.kwargs["targets"] == targets
-        assert call.kwargs["credentials"] == credentials
+        assert self.dialog._active_run is None
         service.apply_feature_details.assert_called_once_with(layer, stored_values)
 
 

@@ -5,10 +5,14 @@ from location_service.tests import HAS_QGIS
 
 if HAS_QGIS:
     import qgis.utils
+    from qgis.core import QgsProject
     from qgis.PyQt.QtGui import QShowEvent
 
+    from location_service.functions.places import PlacesFunctions
+    from location_service.functions.places_storage import drawable_result_items
     from location_service.ui.places import places as places_module
-    from location_service.ui.places.places import PlacesUi
+    from location_service.ui.places.places import PlacesPage, PlacesUi
+    from location_service.utils.configuration_handler import ConfigurationHandler
 
     HAS_IFACE = qgis.utils.iface is not None
 else:
@@ -23,6 +27,20 @@ class TestPlacesUiRegressions(unittest.TestCase):
         self.dialog = PlacesUi()
         self.dialog.language_comboBox.setEditText("Default")
         self.dialog.political_view_comboBox.setCurrentIndex(0)
+        project = QgsProject.instance()
+        existing = set(project.mapLayers())
+        self.addCleanup(
+            lambda: project.removeMapLayers(list(set(project.mapLayers()) - existing))
+        )
+
+    @staticmethod
+    def _page(result):
+        """Returns a result page like the one the Places algorithm writes."""
+        places = PlacesFunctions.__new__(PlacesFunctions)
+        layer = places.build_result_layer(
+            {"ResultItems": drawable_result_items(result)}, "SearchText", "Storage"
+        )
+        return PlacesPage(layer, result.get("NextToken"))
 
     def tearDown(self):
         self.dialog.deleteLater()
@@ -77,8 +95,7 @@ class TestPlacesUiRegressions(unittest.TestCase):
             "ap-southeast-1",
             "v1.public.test",
         )
-        self.dialog._send_request = Mock(return_value=self._result())
-        self.dialog.places.add_point_layer = Mock(return_value=Mock())
+        self.dialog._send_request = Mock(return_value=self._page(self._result()))
         self.dialog._set_pagination = Mock()
         return preferences
 
@@ -87,27 +104,26 @@ class TestPlacesUiRegressions(unittest.TestCase):
         self.dialog._parse_position = Mock(return_value=[139.7, 35.6])
         self.dialog._build_request = Mock(return_value=request)
         self.dialog._apply_region_capabilities = Mock()
-        self.dialog.places.api_handler = Mock()
-        self.dialog.places.add_point_layer = Mock()
-
-        def refresh_settings(*_args):
-            self.dialog.refresh_region_capabilities()
-            return {
-                "ResultItems": [
-                    {
-                        "PlaceId": "old-place",
-                        "Position": [139.7, 35.6],
-                    }
-                ],
+        run = Mock()
+        page = self._page(
+            {
+                "ResultItems": [{"PlaceId": "old-place", "Position": [139.7, 35.6]}],
                 "NextToken": "old-page-2",
             }
+        )
+
+        def refresh_settings(*_args):
+            self.dialog._active_run = run
+            self.dialog.refresh_region_capabilities()
+            return page
 
         self.dialog._send_request = Mock(side_effect=refresh_settings)
 
         self.dialog._search()
 
-        self.dialog.places.api_handler.abort.assert_called_once_with()
-        self.dialog.places.add_point_layer.assert_not_called()
+        # Cancelling the algorithm run aborts the request it is waiting for.
+        run.cancel.assert_called_once_with()
+        assert QgsProject.instance().mapLayer(page.layer.id()) is None
         assert self.dialog._pagination_request is None
         assert self.dialog._next_token is None
         assert not self.dialog.button_load_more.isEnabled()
@@ -217,18 +233,15 @@ class TestPlacesUiRegressions(unittest.TestCase):
         self.dialog._build_request = Mock(return_value=request)
         self.dialog.localization_preferences = Mock()
         self.dialog.localization_preferences.load.return_value = ("", "")
-        self.dialog.places.add_point_layer = Mock(return_value=Mock())
         self.dialog._set_pagination = Mock()
         fake_iface = Mock()
 
         for country_code in ("JPN", None):
             with self.subTest(country_code=country_code):
-                self.dialog.places.add_point_layer.reset_mock()
-                self.dialog._send_request = Mock(
-                    return_value=self._result(
-                        "Stored result", country_code=country_code
-                    )
+                page = self._page(
+                    self._result("Stored result", country_code=country_code)
                 )
+                self.dialog._send_request = Mock(return_value=page)
                 with (
                     patch.object(places_module, "iface", fake_iface),
                     patch.object(places_module, "show_warning") as warning,
@@ -240,11 +253,12 @@ class TestPlacesUiRegressions(unittest.TestCase):
                 error.assert_not_called()
                 warning.assert_not_called()
                 self.dialog._send_request.assert_called_once_with(request, "Storage")
-                self.dialog.places.add_point_layer.assert_called_once_with(
-                    self.dialog._send_request.return_value,
-                    "SearchText",
-                    intended_use="Storage",
-                )
+                assert QgsProject.instance().mapLayer(page.layer.id()) is page.layer
+                (country,) = [
+                    feature[PlacesFunctions.FIELD_COUNTRY_CODE]
+                    for feature in page.layer.getFeatures()
+                ]
+                assert country == (country_code or "")
 
     def test_load_more_clears_a_request_with_an_old_api_key(self):
         handler = Mock()
@@ -338,13 +352,11 @@ class TestPlacesUiRegressions(unittest.TestCase):
 
     def test_load_more_adds_japan_and_unknown_country_results(self):
         request = self._search_request()
-        layer = Mock()
-        layer.isEditable.return_value = False
+        layer = self._page(self._result("First page")).layer
         self.dialog.places.configuration_handler = Mock()
         self.dialog.places.configuration_handler.get_credentials.return_value = request[
             "credentials"
         ]
-        self.dialog.places.add_features = Mock()
         self.dialog._pagination_layer_is_available = Mock(return_value=True)
         self.dialog._layer_place_ids = Mock(return_value={"place-1"})
 
@@ -355,12 +367,11 @@ class TestPlacesUiRegressions(unittest.TestCase):
                 self.dialog._pagination_place_ids = {"place-1"}
                 self.dialog._next_token = "page-2"
                 self.dialog.button_load_more.setEnabled(True)
-                self.dialog._send_request = Mock(
-                    return_value=self._result(
-                        "Stored next page", country_code, "page-3"
-                    )
-                )
-                self.dialog.places.add_features.reset_mock()
+                result = self._result("Stored next page", country_code, "page-3")
+                # A new PlaceId, so the page is not a duplicate of the layer.
+                result["ResultItems"][0]["PlaceId"] = f"place-{country_code}"
+                self.dialog._send_request = Mock(return_value=self._page(result))
+                count_before = layer.featureCount()
 
                 with (
                     patch.object(places_module, "show_warning") as warning,
@@ -372,7 +383,7 @@ class TestPlacesUiRegressions(unittest.TestCase):
                 error.assert_not_called()
                 warning.assert_not_called()
                 self.dialog._send_request.assert_called_once()
-                self.dialog.places.add_features.assert_called_once()
+                assert layer.featureCount() == count_before + 1
                 assert self.dialog._pagination_request is request
                 assert self.dialog._next_token == "page-3"
                 assert self.dialog.button_load_more.isEnabled()
@@ -396,7 +407,9 @@ class TestPlacesUiRegressions(unittest.TestCase):
         self.dialog.button_load_more.setEnabled(True)
         self.dialog._pagination_layer_is_available = Mock(side_effect=(True, False))
         self.dialog._layer_place_ids = Mock(return_value={"place-1"})
-        self.dialog._send_request = Mock(return_value=self._result(token="page-3"))
+        self.dialog._send_request = Mock(
+            return_value=self._page(self._result(token="page-3"))
+        )
         self.dialog._append_result_page = Mock()
 
         with patch.object(places_module, "show_warning") as warning:
@@ -442,9 +455,28 @@ class TestPlacesUiRegressions(unittest.TestCase):
             "Position": [139.7, 35.6],
         }
         result = {"ResultItems": [None, "not an object", valid, {"Position": []}]}
+        request = self._search_request()
+        existing = self._page({"ResultItems": []}).layer
 
-        assert self.dialog._has_drawable_results(result)
-        assert self.dialog._new_page_items(result) == ([valid], {"place-1"})
+        with (
+            patch.object(
+                ConfigurationHandler,
+                "get_credentials",
+                return_value=request["credentials"],
+            ),
+            patch.object(
+                self.dialog.places.configuration_handler,
+                "get_credentials",
+                return_value=request["credentials"],
+            ),
+            patch.object(PlacesFunctions, "search_text", Mock(return_value=result)),
+        ):
+            page = self.dialog._send_request(request, "Storage")
+
+        assert page.layer.featureCount() == 1
+        features, place_ids = self.dialog._new_page_features(existing, page.layer)
+        assert [feature["Title"] for feature in features] == ["Valid place"]
+        assert place_ids == {"place-1"}
 
     def test_spontaneous_show_keeps_unsent_localization_values(self):
         class SpontaneousShowEvent(QShowEvent):

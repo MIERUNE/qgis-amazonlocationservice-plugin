@@ -1,3 +1,4 @@
+import contextlib
 import re
 import unittest
 from unittest.mock import DEFAULT, Mock, patch
@@ -11,6 +12,7 @@ if HAS_QGIS:
         QgsCsException,
         QgsFeature,
         QgsGeometry,
+        QgsPointXY,
         QgsProject,
         QgsVectorLayer,
     )
@@ -24,10 +26,12 @@ if HAS_QGIS:
         SnapOptions,
         TracePoint,
     )
+    from location_service.processing_provider import inputs, routes_algorithms
     from location_service.ui.routes import constants
     from location_service.ui.routes import routes as routes_module
     from location_service.ui.routes.routes import RoutesUi
     from location_service.utils.click_handler import MultiPointCollector
+    from location_service.utils.configuration_handler import ConfigurationHandler
     from location_service.utils.external_api_handler import ApiError
     from location_service.utils.feedback import INFO, SUCCESS, WARNING
 
@@ -351,16 +355,26 @@ class TestRoutesUiRegressions(unittest.TestCase):
         for method in REQUEST_METHODS:
             getattr(routes, method).side_effect = bill
         self.dialog.routes = routes
+        # The dialog sends requests through the Processing algorithms, which
+        # create their own facade and read the configured credentials.
+        for patcher in (
+            patch.object(routes_algorithms, "RoutesFunctions", return_value=routes),
+            patch.object(
+                ConfigurationHandler, "get_credentials", return_value=CREDENTIALS
+            ),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
         return routes
 
     def _patch_send_request(self, response, bucket="Core"):
-        """Replaces the send step with one that bills the run first."""
-
-        def send(_request):
-            self.dialog.routes.api_handler.last_pricing_bucket = bucket
-            return response
-
-        return patch.object(self.dialog, "_send_request", side_effect=send)
+        """Makes every request of the mocked facade bill and return ``response``."""
+        routes = self.dialog.routes
+        if not isinstance(routes, Mock):
+            routes = self._mock_routes(bucket)
+        for method in REQUEST_METHODS:
+            getattr(routes, method).return_value = response
+        return contextlib.nullcontext()
 
     def _run_dialog(self):
         """Runs the dialog once and returns the error box and message mocks."""
@@ -688,14 +702,144 @@ class TestRoutesUiRegressions(unittest.TestCase):
         assert self.dialog.time_arrival_radioButton.isEnabled()
         assert self.dialog.time_arrival_radioButton.toolTip() == ""
 
-    def test_saving_settings_during_a_run_cancels_the_active_request(self):
-        routes = self._mock_routes()
-        self.dialog._busy = True
+    def _sent_options(self, routes, method, response):
+        """Runs the dialog and returns the options its algorithm sent."""
+        getattr(routes, method).return_value = response
+        with patch.object(
+            QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes
+        ):
+            error, _push_message = self._run_dialog()
+        error.assert_not_called()
+        getattr(routes, method).assert_called_once()
+        return getattr(routes, method).call_args.args[0]
 
-        self.dialog.refresh_region_capabilities()
+    def test_the_algorithm_sends_the_route_options_the_dialog_built(self):
+        self._set_route_positions()
+        self.dialog.travelmode_comboBox.setCurrentText("Truck")
+        self.dialog.optimizefor_comboBox.setCurrentText("ShortestRoute")
+        self.dialog.avoid_tollroads_checkBox.setChecked(True)
+        self.dialog.avoid_uturns_checkBox.setChecked(True)
+        self.dialog.alternatives_spinBox.setValue(2)
+        self.dialog._add_waypoint(QgsPointXY(139.75, 35.65))
+        self.dialog._add_waypoint(QgsPointXY(139.72, 35.62))
+        self.dialog.time_departure_radioButton.setChecked(True)
+        self.dialog.time_dateTimeEdit.setDateTime(
+            QDateTime(QDate(2026, 3, 1), QTime(9, 30))
+        )
+        routes = self._mock_routes()
+        expected = self.dialog._build_route_options()
+
+        sent = self._sent_options(routes, "request_routes", ROUTE_RESULT)
+
+        assert sent == expected
+        assert sent.waypoints == ((139.75, 35.65), (139.72, 35.62))
+
+    def test_the_algorithm_sends_the_transit_options_the_dialog_built(self):
+        self._set_route_positions()
+        self.dialog.travelmode_comboBox.setCurrentText("Transit")
+        self.dialog.transit_filter_comboBox.setCurrentIndex(1)
+        for index in range(self.dialog.transit_modes_listWidget.count()):
+            item = self.dialog.transit_modes_listWidget.item(index)
+            if item.text() in ("Bus", "Subway"):
+                item.setCheckState(Qt.CheckState.Checked)
+        self.dialog.time_arrival_radioButton.setChecked(True)
+        routes = self._mock_routes()
+        expected = self.dialog._build_route_options()
+
+        sent = self._sent_options(routes, "request_routes", TRANSIT_ROUTE_RESULT)
+
+        assert sent == expected
+        assert sent.transit_allowed_modes == ("Bus", "Subway")
+        assert sent.arrival_time
+
+    def test_the_algorithm_sends_the_isoline_options_the_dialog_built(self):
+        self.dialog.routes_comboBox.setCurrentText("CalculateIsolines")
+        self._set_isoline_center()
+        self.dialog.iso_thresholds_lineEdit.setText("1.5, 10, 25")
+        self.dialog.iso_travelmode_comboBox.setCurrentText("Pedestrian")
+        self.dialog.iso_direction_comboBox.setCurrentIndex(1)
+        routes = self._mock_routes()
+        expected = self.dialog._build_request("CalculateIsolines")["options"]
+
+        sent = self._sent_options(
+            routes, "request_isolines", _isoline_response([1.5, 10, 25])
+        )
+
+        assert sent == expected
+        assert sent.thresholds == (90, 600, 1500)
+        assert sent.direction == "Destination"
+
+    def test_the_algorithm_sends_the_trace_the_dialog_confirmed(self):
+        self.dialog.routes_comboBox.setCurrentText("SnapToRoads")
+        layer = _point_layer(
+            "field=pid:string&field=seq:integer&field=ts:string"
+            "&field=hdg:double&field=spd:double"
+        )
+        rows = (
+            ((139.71, 35.61), {"pid": "b", "seq": 2, "hdg": 90.0}),
+            ((139.70, 35.60), {"pid": "a", "seq": 1, "spd": 12.5}),
+        )
+        for (lon, lat), values in rows:
+            values = {"ts": "2026-03-01T09:30:00+09:00", **values}
+            _add_point(layer, f"Point ({lon} {lat})", values)
+        self.project.addMapLayer(layer)
+        self.input_layers.add(layer.id())
+        self.dialog.snap_layer_comboBox.setLayer(layer)
+        for combo, field in (
+            (self.dialog.snap_id_comboBox, "pid"),
+            (self.dialog.snap_order_comboBox, "seq"),
+            (self.dialog.snap_timestamp_comboBox, "ts"),
+            (self.dialog.snap_heading_comboBox, "hdg"),
+            (self.dialog.snap_speed_comboBox, "spd"),
+        ):
+            combo.setLayer(layer)
+            combo.setField(field)
+            assert combo.currentField() == field
+        routes = self._mock_routes()
+        expected = self.dialog._build_request("SnapToRoads")["options"]
+
+        sent = self._sent_options(
+            routes,
+            "request_snap_to_roads",
+            _snap_response(((139.70, 35.60), (139.71, 35.61))),
+        )
+
+        assert sent == expected
+        points = self._published_layer("SnapToRoads (confidence points)")
+        rows = [
+            (feature["SourceID"], feature["SourceOrder"], feature["Heading"])
+            for feature in points.getFeatures()
+        ]
+        assert rows == [("a", "1", None), ("b", "2", 90.0)]
+
+    def test_the_algorithm_sends_the_matrix_the_dialog_confirmed(self):
+        self.dialog.routes_comboBox.setCurrentText("CalculateRouteMatrix")
+        self._set_matrix_layers()
+        self.dialog.mx_travelmode_comboBox.setCurrentText("Scooter")
+        routes = self._mock_routes()
+        expected = self.dialog._build_request("CalculateRouteMatrix")["options"]
+
+        sent = self._sent_options(routes, "request_route_matrix", MATRIX_RESULT)
+
+        assert sent == expected
+
+    def test_saving_settings_during_a_run_cancels_the_active_request(self):
+        self._set_route_positions()
+        routes = self._mock_routes()
+
+        def save_settings_during_request(*_args, **_kwargs):
+            self.dialog.refresh_region_capabilities()
+            return ROUTE_RESULT
+
+        routes.request_routes.side_effect = save_settings_during_request
+
+        error, _push_message = self._run_dialog()
 
         assert self.dialog._cancelled
+        # Cancelling the algorithm run aborts the request it is waiting for.
         routes.api_handler.abort.assert_called_once()
+        error.assert_not_called()
+        assert self._published_layer_names() == []
 
     def test_saving_settings_while_idle_cancels_nothing(self):
         routes = self._mock_routes()
@@ -1299,26 +1443,44 @@ class TestRoutesUiRegressions(unittest.TestCase):
 
 @unittest.skipUnless(HAS_QGIS, "QGIS runtime is required")
 class TestOrderSortKey(unittest.TestCase):
-    """A layer order field can mix numbers, text and NULL without a TypeError."""
+    """The order key the dialog and the algorithms share."""
 
     def test_numbers_sort_before_text_and_null_sorts_last(self):
         values = [None, "b", 2, "a", 1, True]
 
-        ordered = sorted(values, key=routes_module._order_sort_key)
+        ordered = sorted(values, key=inputs.order_sort_key)
 
         assert ordered == [1, 2, True, "a", "b", None]
 
     def test_a_boolean_sorts_as_text_instead_of_as_a_number(self):
-        group = routes_module._order_sort_key(True)[0]
+        group = inputs.order_sort_key(True)[0]
 
-        assert group == routes_module._order_sort_key("x")[0]
-        assert group != routes_module._order_sort_key(1)[0]
+        assert group == inputs.order_sort_key("x")[0]
+        assert group != inputs.order_sort_key(1)[0]
 
     def test_a_nan_order_sorts_in_the_null_group(self):
-        nan_key = routes_module._order_sort_key(float("nan"))
+        nan_key = inputs.order_sort_key(float("nan"))
 
-        assert nan_key == routes_module._order_sort_key(None)
-        assert nan_key[0] != routes_module._order_sort_key(1)[0]
+        assert nan_key == inputs.order_sort_key(None)
+        assert nan_key[0] != inputs.order_sort_key(1)[0]
+
+    def test_dates_and_times_sort_chronologically(self):
+        key = inputs.order_sort_key
+        earlier = QDateTime(QDate(2026, 9, 29), QTime(9, 5))
+        later = QDateTime(QDate(2026, 9, 29), QTime(10, 0))
+
+        # As text, "10:00" would sort before "9:05".
+        assert key(earlier) < key(later)
+        assert key(QDate(2026, 1, 1)) < key(QDate(2026, 1, 2))
+        assert key(QTime(9, 5)) < key(QTime(10, 0))
+        assert key(QDateTime()) == key(None)
+
+    def test_a_datetime_timestamp_keeps_its_instant(self):
+        value = QDateTime.fromString("2026-01-01T00:00:00Z", Qt.DateFormat.ISODate)
+        feature = Mock()
+        feature.__getitem__ = Mock(return_value=value)
+
+        assert inputs.field_timestamp(feature, "t") == "2026-01-01T00:00:00+00:00"
 
 
 @unittest.skipUnless(HAS_QGIS, "QGIS runtime is required")

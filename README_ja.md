@@ -119,6 +119,21 @@ QGISでAmazon Location Service v2の機能を利用するプラグインです�
 1. `Terms`メニューをクリック
 2. 利用規約ページがブラウザで表示
 
+### Processing機能
+
+Places / Routesの機能は、Processingツールボックスからも利用できます。
+
+1. QGISのProcessingツールボックスを開く
+2. `Amazon Location Service`の`Places`または`Routes`から機能を選択
+3. パラメータと出力先を設定
+4. 実行ボタンをクリック
+5. 結果がレイヤまたはテーブルで出力
+
+利用できる機能:
+
+- Places: `SearchText`、`Geocode`、`ReverseGeocode`、`SearchNearby`、`GetPlace (add place details)`
+- Routes: `CalculateRoutes`、`CalculateIsolines`、`SnapToRoads`、`CalculateRouteMatrix`
+
 ### 利用規約
 
 [AWS Service Terms](https://aws.amazon.com/jp/service-terms)

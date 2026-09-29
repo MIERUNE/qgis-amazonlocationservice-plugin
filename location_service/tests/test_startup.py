@@ -5,6 +5,7 @@ from location_service.tests import HAS_QGIS
 
 qgis_iface = None
 if HAS_QGIS:
+    from qgis.core import QgsApplication
     from qgis.PyQt import sip
     from qgis.PyQt.QtCore import QEvent, Qt
     from qgis.PyQt.QtGui import QPalette
@@ -13,6 +14,7 @@ if HAS_QGIS:
 
     from location_service import classFactory
     from location_service.location_service import LocationService
+    from location_service.processing_provider.provider import PROVIDER_ID
 
     STAY_ON_TOP = Qt.WindowType.WindowStaysOnTopHint
     TOOL_WINDOW = Qt.WindowType.Tool
@@ -46,11 +48,17 @@ class TestPluginStartup(unittest.TestCase):
         plugin = None
         toolbar = None
         actions = []
+        # The QGIS test runner may already have loaded the plugin itself.
+        registry = QgsApplication.processingRegistry()
+        baseline_provider = registry.providerById(PROVIDER_ID)
         try:
             plugin = classFactory(qgis_iface)
-            toolbar = plugin.toolbar
             plugin.initGui()
+            toolbar = plugin.toolbar
             assert len(plugin.actions) == 5
+            assert registry.providerById(PROVIDER_ID) is not None
+            if baseline_provider is None:
+                assert registry.providerById(PROVIDER_ID) is plugin.provider
             actions = list(plugin.actions)
             normal_dialogs = (plugin.config, plugin.maps)
             tool_dialogs = (plugin.places, plugin.routes)
@@ -90,15 +98,16 @@ class TestPluginStartup(unittest.TestCase):
         assert toolbar is not None
         assert sip.isdeleted(toolbar)
         assert all(sip.isdeleted(action) for action in actions)
+        assert registry.providerById(PROVIDER_ID) is baseline_provider
 
     def test_reloading_does_not_accumulate_toolbars_or_actions(self):
         baseline = len(self.location_service_toolbars())
 
         for _ in range(2):
             plugin = classFactory(qgis_iface)
-            toolbar = plugin.toolbar
             try:
                 plugin.initGui()
+                toolbar = plugin.toolbar
                 actions = list(plugin.actions)
                 assert len(actions) == 5
                 assert len(self.location_service_toolbars()) == baseline + 1
@@ -112,6 +121,7 @@ class TestPluginStartup(unittest.TestCase):
 
     def test_saved_config_refreshes_open_places_region_capabilities(self):
         plugin = classFactory(qgis_iface)
+        plugin.initGui()
         try:
             plugin.show_places()
             QApplication.processEvents()
@@ -133,6 +143,7 @@ class TestPluginStartup(unittest.TestCase):
 
     def test_places_footer_fits_at_minimum_width(self):
         plugin = classFactory(qgis_iface)
+        plugin.initGui()
         try:
             dialog = plugin.places
             dialog.resize(dialog.minimumWidth(), dialog.height())
@@ -172,6 +183,7 @@ class TestPluginStartup(unittest.TestCase):
 
     def test_places_language_popup_uses_dark_text(self):
         plugin = classFactory(qgis_iface)
+        plugin.initGui()
         try:
             plugin.show_places()
             dialog = plugin.places
@@ -187,6 +199,7 @@ class TestPluginStartup(unittest.TestCase):
 
     def test_terms_browser_failure_shows_error(self):
         plugin = classFactory(qgis_iface)
+        plugin.initGui()
         try:
             with (
                 patch(
@@ -205,6 +218,34 @@ class TestPluginStartup(unittest.TestCase):
         finally:
             plugin.unload()
             self.process_deferred_deletes()
+
+
+@unittest.skipUnless(HAS_QGIS, "QGIS runtime is required")
+class TestStartupWithoutInterface(unittest.TestCase):
+    """qgis_process creates the plugin with ``iface=None`` and only uses Processing."""
+
+    def test_init_processing_and_unload_without_an_interface(self):
+        # The QGIS test runner may already have loaded the plugin itself.
+        registry = QgsApplication.processingRegistry()
+        baseline_provider = registry.providerById(PROVIDER_ID)
+        plugin = classFactory(None)
+        try:
+            assert plugin.toolbar is None
+            assert plugin.places is None
+            plugin.initProcessing()
+            provider = registry.providerById(PROVIDER_ID)
+            assert provider is not None
+            if baseline_provider is None:
+                assert provider is plugin.provider
+                assert len(provider.algorithms()) == 9
+        finally:
+            plugin.unload()
+        assert registry.providerById(PROVIDER_ID) is baseline_provider
+
+    def test_unload_before_init_gui_is_safe(self):
+        plugin = classFactory(None)
+        plugin.unload()
+        assert plugin.actions == []
 
 
 if __name__ == "__main__":

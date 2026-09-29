@@ -129,3 +129,17 @@ def validate_region_options(
         raise ValueError(
             f"QueryRadius must be {LIMITED_MAX_RADIUS:,} meters or less in {region}."
         )
+
+
+def parse_language(text: str | None) -> str | None:
+    """
+    Returns the BCP 47 language code, or ``None`` for the API default.
+
+    Raises ``ValueError`` when the value is not a BCP 47 code.
+    """
+    text = str(text or "").strip()
+    if not text or text == LANGUAGE_DEFAULT:
+        return None
+    if len(text) > LANGUAGE_MAX_LENGTH or not LANGUAGE_PATTERN.match(text):
+        raise ValueError(LANGUAGE_FORMAT_HINT)
+    return text

@@ -1,12 +1,13 @@
 import html
+import json
 import math
 import os
 from urllib.parse import urlparse
 
 from qgis.core import (
-    NULL,
     Qgis,
     QgsCsException,
+    QgsField,
     QgsMapLayerProxyModel,
     QgsMessageLog,
     QgsPointXY,
@@ -27,14 +28,17 @@ from qgis.PyQt.QtWidgets import (
 )
 from qgis.utils import iface
 
-from ...functions import routes_capabilities, routes_layers, routes_results
+from ...functions import routes_capabilities, routes_layers
 from ...functions.routes import RoutesFunctions
 from ...functions.routes_requests import (
+    AVOID_KEYS,
+    ISOLINE_DIRECTIONS,
     MAX_MATRIX_CELLS,
     MAX_TRACE_POINTS,
     MAX_WAYPOINTS,
     OPTIMIZE_FOR,
     ROUTES_TRAVEL_MODES,
+    THRESHOLD_TYPES,
     TRANSIT_LIKE_MODES,
     TRANSIT_MODE_VALUES,
     TRAVEL_MODES,
@@ -48,6 +52,28 @@ from ...functions.routes_requests import (
     build_routes_body,
     build_snap_body,
     haversine_meters,
+)
+from ...processing_provider.inputs import (
+    field_number,
+    field_text,
+    field_timestamp,
+    field_value,
+    is_null,
+    iso_time_with_offset,
+    order_sort_key,
+)
+from ...processing_provider.routes_algorithms import (
+    TRANSIT_MODE_CHOICES,
+    CalculateIsolinesAlgorithm,
+    CalculateRouteMatrixAlgorithm,
+    CalculateRoutesAlgorithm,
+    SnapToRoadsAlgorithm,
+)
+from ...processing_provider.runner import (
+    AlgorithmRun,
+    rows_layer,
+    temporary_output,
+    wgs84_point,
 )
 from ...utils.click_handler import (
     MapClickCoordinateUpdater,
@@ -96,6 +122,14 @@ _BODY_BUILDERS = {
     "CalculateRouteMatrix": build_matrix_body,
 }
 
+# The Processing algorithm that sends each operation.
+ALGORITHMS = {
+    "CalculateRoutes": CalculateRoutesAlgorithm,
+    "CalculateIsolines": CalculateIsolinesAlgorithm,
+    "SnapToRoads": SnapToRoadsAlgorithm,
+    "CalculateRouteMatrix": CalculateRouteMatrixAlgorithm,
+}
+
 
 class RoutesUi(QDialog):
     """Routes dialog for the four Routes V2 operations."""
@@ -114,6 +148,7 @@ class RoutesUi(QDialog):
         self._iso_map_click = None
         self._waypoint_collector = None
         self._waypoints: list[tuple[float, float]] = []
+        self._active_run: AlgorithmRun | None = None
         self._cancelled = False
         self._busy = False
 
@@ -463,7 +498,7 @@ class RoutesUi(QDialog):
         """Cancels active work and refreshes controls after settings change."""
         if self._busy:
             self._cancelled = True
-            self.routes.api_handler.abort()
+            self._abort_active_run()
         self._apply_region_capabilities()
 
     def _apply_region_capabilities(self) -> None:
@@ -533,13 +568,7 @@ class RoutesUi(QDialog):
         """Returns the depart/arrival choice as RouteOptions keyword values."""
         if self.time_departnow_radioButton.isChecked():
             return {"depart_now": True}
-        # The editor value is local time; send it with the system UTC offset.
-        iso_time = (
-            self.time_dateTimeEdit.dateTime()
-            .toPyDateTime()
-            .astimezone()
-            .isoformat(timespec="seconds")
-        )
+        iso_time = iso_time_with_offset(self.time_dateTimeEdit.dateTime())
         if self.time_departure_radioButton.isChecked():
             return {"departure_time": iso_time}
         if self.time_arrival_radioButton.isChecked():
@@ -685,6 +714,9 @@ class RoutesUi(QDialog):
         )
         return {
             "rows": rows,
+            "order_field": _field_definition(
+                layer, self.snap_order_comboBox.currentField()
+            ),
             "options": SnapOptions(
                 trace_points=trace_points,
                 snap_radius=self.snap_radius_spinBox.value(),
@@ -747,8 +779,8 @@ class RoutesUi(QDialog):
 
         Multipoint features are expanded per part, and the scan stops as soon
         as ``max_rows`` is exceeded instead of reading a large layer to the
-        end. Rows are ordered by the order field value (numbers before other
-        values, NULL last), then by feature id, then by the part index. A
+        end. Rows are ordered by the order field value (numbers, dates and
+        times before text, NULL last), then by feature id, then by the part index. A
         missing or NULL id falls back to the feature id as a string.
         """
         if (
@@ -778,8 +810,8 @@ class RoutesUi(QDialog):
                         "usable points."
                     )
                 wgs84 = _transform_point_to_wgs84(transform, point, name)
-                identifier = _field_text(feature, id_field)
-                order = _field_value(feature, order_field)
+                identifier = field_text(feature, id_field)
+                order = field_value(feature, order_field)
                 if isinstance(order, float) and not math.isfinite(order):
                     order = None
                 rows.append(
@@ -789,14 +821,14 @@ class RoutesUi(QDialog):
                         "feature_id": feature.id(),
                         "part": part_index,
                         "position": [wgs84.x(), wgs84.y()],
-                        "timestamp": _field_timestamp(feature, timestamp_field),
-                        "heading": _field_number(feature, heading_field),
-                        "speed": _field_number(feature, speed_field),
+                        "timestamp": field_timestamp(feature, timestamp_field),
+                        "heading": field_number(feature, heading_field),
+                        "speed": field_number(feature, speed_field),
                     }
                 )
         rows.sort(
             key=lambda row: (
-                _order_sort_key(row["order"]),
+                order_sort_key(row["order"]),
                 row["feature_id"],
                 row["part"],
             )
@@ -837,14 +869,8 @@ class RoutesUi(QDialog):
             # The confirmation's nested event loop may have cancelled the run.
             if self._cancelled:
                 return
-            # Clear stale pricing, then retain the new HTTP 200 bucket even if
-            # its response body cannot be parsed.
-            self.routes.api_handler.last_pricing_bucket = None
-            try:
-                with busy_operation(self.button_search, "Running…"):
-                    result = self._send_request(request)
-            finally:
-                request["pricing_bucket"] = self.routes.api_handler.last_pricing_bucket
+            with busy_operation(self.button_search, "Running…"):
+                result = self._send_request(request)
             if self._cancelled:
                 return
             self._publish_result(request, result)
@@ -866,7 +892,14 @@ class RoutesUi(QDialog):
             )
 
     def _send_request(self, request: dict) -> dict:
-        """Re-checks the captured credentials and sends one request."""
+        """
+        Re-checks the captured credentials and runs one request.
+
+        The request is sent by the operation's Processing algorithm. The
+        pricing bucket of an HTTP 200 reply is kept in the request even if
+        its body cannot be used.
+        """
+        request["pricing_bucket"] = None
         credentials = request["credentials"]
         if credentials != self.routes.configuration_handler.get_credentials():
             raise ValueError(
@@ -874,16 +907,75 @@ class RoutesUi(QDialog):
                 "started. Run it again."
             )
         function = request["function"]
+        if function not in ALGORITHMS:
+            raise ValueError(f"Unknown function: {function}")
+        run = AlgorithmRun(ALGORITHMS[function])
+        self._active_run = run
+        try:
+            results = run.run(self._algorithm_parameters(request))
+        finally:
+            self._active_run = None
+            request["pricing_bucket"] = run.pricing_bucket
+        layers = {}
+        for name in ("OUTPUT", "OUTPUT_SUMMARY", "OUTPUT_POINTS", "OUTPUT_LINES"):
+            layer = run.take_layer(results, name)
+            if layer is not None:
+                layers[name] = layer
+        return {
+            "layers": layers,
+            "attributions": json.loads(results.get("ATTRIBUTIONS") or "[]"),
+            "notices": json.loads(results.get("NOTICES") or "[]"),
+        }
+
+    @staticmethod
+    def _algorithm_parameters(request: dict) -> dict:
+        """Returns the Processing parameters of one captured request."""
+        function = request["function"]
         options = request["options"]
         if function == "CalculateRoutes":
-            return self.routes.request_routes(options, credentials=credentials)
+            return _route_parameters(options, request.get("add_summary", False))
         if function == "CalculateIsolines":
-            return self.routes.request_isolines(options, credentials=credentials)
+            factor = 60 if options.threshold_type == "Time" else 1000
+            return {
+                "CENTER": wgs84_point(options.center),
+                "DIRECTION": ISOLINE_DIRECTIONS.index(options.direction),
+                "THRESHOLD_TYPE": THRESHOLD_TYPES.index(options.threshold_type),
+                # The algorithm takes minutes or kilometers, like the dialog.
+                "THRESHOLDS": ", ".join(
+                    repr(value / factor) for value in options.thresholds
+                ),
+                "TRAVEL_MODE": TRAVEL_MODES.index(options.travel_mode),
+                "OUTPUT": temporary_output(),
+            }
         if function == "SnapToRoads":
-            return self.routes.request_snap_to_roads(options, credentials=credentials)
-        if function == "CalculateRouteMatrix":
-            return self.routes.request_route_matrix(options, credentials=credentials)
-        raise ValueError(f"Unknown function: {function}")
+            return {
+                "INPUT": rows_layer(request["rows"], request.get("order_field")),
+                "ID_FIELD": "id",
+                "ORDER_FIELD": "order",
+                "TIMESTAMP_FIELD": "timestamp",
+                "HEADING_FIELD": "heading",
+                "SPEED_FIELD": "speed",
+                "SNAP_RADIUS": options.snap_radius,
+                "TRAVEL_MODE": TRAVEL_MODES.index(options.travel_mode),
+                "OUTPUT": temporary_output(),
+                "OUTPUT_POINTS": (
+                    temporary_output() if request["output_confidence"] else None
+                ),
+            }
+        return {
+            "ORIGINS": rows_layer(request["origins"]),
+            "ORIGINS_ID_FIELD": "id",
+            "DESTINATIONS": rows_layer(request["destinations"]),
+            "DESTINATIONS_ID_FIELD": "id",
+            "TRAVEL_MODE": TRAVEL_MODES.index(options.travel_mode),
+            "OUTPUT": temporary_output(),
+            "OUTPUT_LINES": temporary_output() if request["od_lines"] else None,
+        }
+
+    def _abort_active_run(self) -> None:
+        """Cancels the running algorithm, if any."""
+        if self._active_run is not None:
+            self._active_run.cancel()
 
     def _publish_result(self, request: dict, result: dict) -> None:
         """Builds, checks, and publishes the layers of one response."""
@@ -920,18 +1012,16 @@ class RoutesUi(QDialog):
         push_message(SUCCESS, message)
 
     def _routes_result_layers(self, request: dict, result: dict) -> tuple:
-        """Builds the CalculateRoutes layers and success message."""
-        routes_results.validate_route_count(result, request["options"].max_alternatives)
-        attributions = routes_results.collect_attributions(result)
+        """Returns the CalculateRoutes layers and success message."""
+        attributions = result["attributions"]
         request["attributions"] = attributions
-        self._report_notices("CalculateRoutes", routes_results.collect_notices(result))
-        layer = routes_layers.build_route_leg_layer(result)
-        if layer is None:
+        self._report_notices("CalculateRoutes", result["notices"])
+        layer = result["layers"].get("OUTPUT")
+        if layer is None or not layer.featureCount():
             return [], ""
         if any(
-            None in routes_results.route_totals(route)
-            for route in result.get("Routes") or []
-            if isinstance(route, dict)
+            is_null(feature["RouteDistance"]) or is_null(feature["RouteDuration"])
+            for feature in layer.getFeatures()
         ):
             push_message(
                 WARNING,
@@ -940,83 +1030,73 @@ class RoutesUi(QDialog):
                 duration=10,
             )
         layers = [layer]
-        if request.get("add_summary"):
-            summary = routes_layers.build_route_summary_layer(result)
-            if summary is not None:
-                layers.append(summary)
-        for built in layers:
-            routes_layers.record_layer_source(built, "CalculateRoutes", attributions)
-        return layers, self._routes_success_message(result)
+        summary = result["layers"].get("OUTPUT_SUMMARY")
+        if (
+            request.get("add_summary")
+            and summary is not None
+            and summary.featureCount()
+        ):
+            layers.append(summary)
+        return layers, self._routes_success_message(layer)
 
     @staticmethod
-    def _routes_success_message(result: dict) -> str:
+    def _routes_success_message(layer) -> str:
         """Summarizes the main route and the alternative count."""
-        routes = [route for route in result.get("Routes") or [] if route]
         message = "Added the “CalculateRoutes” layer."
-        if routes:
-            distance, duration = routes_results.route_totals(routes[0])
+        route_indexes = set()
+        main_leg = None
+        for feature in layer.getFeatures():
+            route_indexes.add(feature["RouteIndex"])
+            if feature["RouteIndex"] == 0 and main_leg is None:
+                main_leg = feature
+        if main_leg is not None:
+            distance = main_leg["RouteDistance"]
+            duration = main_leg["RouteDuration"]
             parts = []
-            if distance is not None:
+            if not is_null(distance):
                 parts.append(f"{distance / 1000:.1f} km")
-            if duration is not None:
+            if not is_null(duration):
                 parts.append(f"{round(duration / 60)} min")
             if parts:
                 message = f"{message} Main route: {', '.join(parts)}."
-            if len(routes) > 1:
-                message = f"{message} {len(routes) - 1} alternative(s)."
+        if len(route_indexes) > 1:
+            message = f"{message} {len(route_indexes) - 1} alternative(s)."
         return message
 
     def _isolines_result_layers(self, request: dict, result: dict) -> tuple:
-        """Builds the CalculateIsolines layer and success message."""
-        options = request["options"]
-        isolines = routes_results.normalize_isolines(
-            result, options.threshold_type, options.thresholds
-        )
-        layer = routes_layers.build_isoline_layer(
-            isolines, options.direction, options.travel_mode
-        )
-        if layer is None:
+        """Returns the CalculateIsolines layer and success message."""
+        layer = result["layers"].get("OUTPUT")
+        if layer is None or not layer.featureCount():
             return [], ""
-        routes_layers.record_layer_source(layer, "CalculateIsolines")
         return [layer], (
-            f"Added the “CalculateIsolines” layer ({len(isolines)} isolines)."
+            f"Added the “CalculateIsolines” layer ({layer.featureCount()} isolines)."
         )
 
     def _snap_result_layers(self, request: dict, result: dict) -> tuple:
-        """Builds the SnapToRoads layers and success message."""
-        notices = routes_results.validate_notices(result, "The SnapToRoads response")
-        self._report_snap_notices(notices)
-        rows = request["rows"]
-        # Always verify response indexes before joining input attributes,
-        # even when the confidence-point layer is disabled.
-        snapped = routes_results.normalize_snapped_trace_points(
-            result, [row["position"] for row in rows]
-        )
+        """Returns the SnapToRoads layers and success message."""
+        self._report_snap_notices(result["notices"])
+        line = result["layers"].get("OUTPUT")
         # Confidence points are never published without the primary line.
-        line_points = routes_results.snapped_line_points(result)
-        if line_points is None:
+        if line is None or not line.featureCount():
             return [], ""
-        layers = [
-            routes_layers.build_snap_line_layer(
-                line_points,
-                len(rows),
-                len(notices),
-            )
-        ]
-        if request["output_confidence"]:
-            points_layer = routes_layers.build_snap_points_layer(snapped, rows)
-            if points_layer is not None:
-                layers.append(points_layer)
-        for built in layers:
-            routes_layers.record_layer_source(built, "SnapToRoads")
+        layers = [line]
+        points = result["layers"].get("OUTPUT_POINTS")
+        if (
+            request["output_confidence"]
+            and points is not None
+            and points.featureCount()
+        ):
+            layers.append(points)
         return layers, "Added the “SnapToRoads” layer(s)."
 
     def _matrix_result_layers(self, request: dict, result: dict) -> tuple:
-        """Builds the CalculateRouteMatrix layers and success message."""
-        origins = request["origins"]
-        destinations = request["destinations"]
-        rows = routes_results.normalize_matrix(result, len(origins), len(destinations))
-        error_count = sum(1 for row in rows for cell in row if cell["error"])
+        """Returns the CalculateRouteMatrix layers and success message."""
+        table = result["layers"].get("OUTPUT")
+        if table is None:
+            return [], ""
+        error_count = sum(
+            1 for feature in table.getFeatures() if field_text(feature, "Error")
+        )
         if error_count:
             push_message(
                 WARNING,
@@ -1024,12 +1104,11 @@ class RoutesUi(QDialog):
                 "their Distance and Duration are NULL.",
                 duration=10,
             )
-        layers = routes_layers.build_matrix_layers(
-            rows, origins, destinations, request["od_lines"]
-        )
-        for built in layers:
-            routes_layers.record_layer_source(built, "CalculateRouteMatrix")
-        cells = len(origins) * len(destinations)
+        layers = [table]
+        lines = result["layers"].get("OUTPUT_LINES")
+        if request["od_lines"] and lines is not None and lines.featureCount():
+            layers.append(lines)
+        cells = len(request["origins"]) * len(request["destinations"])
         return layers, (f"Added the “CalculateRouteMatrix” table ({cells} routes).")
 
     @staticmethod
@@ -1229,12 +1308,54 @@ class RoutesUi(QDialog):
         if event.spontaneous():
             return
         self._cancelled = True
-        self.routes.api_handler.abort()
+        self._abort_active_run()
         release_map_tool(self._start_map_click)
         release_map_tool(self._end_map_click)
         release_map_tool(self._iso_map_click)
         release_map_tool(self._waypoint_collector)
         self._waypoints_finished()
+
+
+def _field_definition(layer, field_name: str):
+    """Returns a copy of a layer field definition, or ``None``."""
+    if not field_name or not isinstance(layer, QgsVectorLayer) or sip.isdeleted(layer):
+        return None
+    index = layer.fields().indexOf(field_name)
+    if index < 0:
+        return None
+    return QgsField(layer.fields().field(index))
+
+
+def _route_parameters(options: RouteOptions, add_summary: bool) -> dict:
+    """Returns the CalculateRoutes Processing parameters of the options."""
+    parameters = {
+        "ORIGIN": wgs84_point(options.origin),
+        "DESTINATION": wgs84_point(options.destination),
+        "TRAVEL_MODE": ROUTES_TRAVEL_MODES.index(options.travel_mode),
+        "OPTIMIZE_FOR": OPTIMIZE_FOR.index(options.optimize_for),
+        "AVOID": [AVOID_KEYS.index(key) for key in options.avoid],
+        "MAX_ALTERNATIVES": options.max_alternatives,
+        "OUTPUT": temporary_output(),
+        "OUTPUT_SUMMARY": temporary_output() if add_summary else None,
+    }
+    if options.waypoints:
+        # Features keep the waypoint order, which the algorithm preserves.
+        parameters["WAYPOINTS"] = rows_layer(
+            [{"position": position} for position in options.waypoints]
+        )
+    if options.depart_now:
+        parameters["TIME_CHOICE"] = 1
+    for choice, value in ((2, options.departure_time), (3, options.arrival_time)):
+        if value:
+            parameters["TIME_CHOICE"] = choice
+            parameters["TIME"] = QDateTime.fromString(value, Qt.DateFormat.ISODate)
+    transit_modes = options.transit_allowed_modes or options.transit_excluded_modes
+    if transit_modes:
+        parameters["TRANSIT_FILTER"] = 1 if options.transit_allowed_modes else 2
+        parameters["TRANSIT_MODES"] = [
+            TRANSIT_MODE_CHOICES.index(mode) for mode in transit_modes
+        ]
+    return parameters
 
 
 def _transform_point_to_wgs84(transform, point, name: str) -> QgsPointXY:
@@ -1245,60 +1366,3 @@ def _transform_point_to_wgs84(transform, point, name: str) -> QgsPointXY:
         raise ValueError(
             f"{name}: a point could not be transformed to WGS 84."
         ) from error
-
-
-def _is_null(value) -> bool:
-    """Returns whether a feature attribute is NULL."""
-    return value is None or value == NULL
-
-
-def _field_value(feature, field_name: str):
-    """Returns a raw attribute value, or ``None`` for NULL or no field."""
-    if not field_name:
-        return None
-    value = feature[field_name]
-    return None if _is_null(value) else value
-
-
-def _field_text(feature, field_name: str) -> str:
-    """Returns an attribute as text, or an empty string."""
-    value = _field_value(feature, field_name)
-    return "" if value is None else str(value)
-
-
-def _field_number(feature, field_name: str):
-    """Returns an attribute as a float, or ``None``."""
-    value = _field_value(feature, field_name)
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        raise ValueError(
-            f"Field {field_name!r} must contain numbers (got {value!r})."
-        ) from None
-
-
-def _field_timestamp(feature, field_name: str):
-    """Returns an attribute as an offset-aware ISO time string, or ``None``."""
-    value = _field_value(feature, field_name)
-    if value is None:
-        return None
-    if hasattr(value, "toPyDateTime"):
-        # QDateTime values are local time; attach the system UTC offset.
-        return value.toPyDateTime().astimezone().isoformat(timespec="seconds")
-    return str(value).strip() or None
-
-
-def _order_sort_key(order) -> tuple:
-    """Returns a type-safe sort key: numbers, then text, then NULL."""
-    if order is None:
-        return (2, 0.0, "")
-    if isinstance(order, bool):
-        return (1, 0.0, str(order))
-    if isinstance(order, (int, float)):
-        # NaN breaks sorting, so non-finite values sort with NULL, last.
-        if math.isfinite(order):
-            return (0, float(order), "")
-        return (2, 0.0, "")
-    return (1, 0.0, str(order))

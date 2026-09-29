@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote, urlencode
@@ -13,7 +12,6 @@ from qgis.core import (
     QgsMarkerSymbol,
     QgsPalLayerSettings,
     QgsPointXY,
-    QgsProject,
     QgsSimpleMarkerSymbolLayer,
     QgsSingleSymbolRenderer,
     QgsTextFormat,
@@ -322,38 +320,31 @@ class PlacesFunctions(ServiceFunctionsBase):
             url = f"{url}&{query}"
         return url
 
-    def add_point_layer(
+    def build_result_layer(
         self,
         data: dict[str, Any],
         operation: str,
         intended_use: str | None = None,
     ) -> QgsVectorLayer:
-        """Adds search results to the current project as a point layer."""
-        layer = QgsVectorLayer(
-            f"{self.LAYER_TYPE}?crs={self.WGS84_CRS}", operation, "memory"
-        )
-        self.setup_layer(layer, data, operation, intended_use)
-        return layer
+        """
+        Builds a styled point layer without adding it to the project.
 
-    def setup_layer(
-        self,
-        layer: QgsVectorLayer,
-        data: dict[str, Any],
-        operation: str,
-        intended_use: str | None = None,
-    ) -> None:
-        """Populates, styles, and adds the point layer to the project."""
+        The Processing algorithms build their results in a worker thread and
+        copy them to the algorithm output.
+        """
         if intended_use != "Storage":
             raise ValueError(
                 "Places results can only be added to QGIS after a Storage request."
             )
+        layer = QgsVectorLayer(
+            f"{self.LAYER_TYPE}?crs={self.WGS84_CRS}", operation, "memory"
+        )
         self.add_attributes(layer)
         self.add_features(layer, data, operation)
         self.apply_layer_style(layer)
         self.apply_label_style(layer)
         self.record_layer_source(layer, operation, intended_use)
-        layer.triggerRepaint()
-        QgsProject.instance().addMapLayer(layer)
+        return layer
 
     def add_attributes(self, layer: QgsVectorLayer) -> None:
         """Adds place-result fields to the layer."""
@@ -479,71 +470,6 @@ class PlacesFunctions(ServiceFunctionsBase):
                 return False
         return True
 
-    def fetch_selected_feature_details(
-        self,
-        layer: Any,
-        political_view: str | None = None,
-        language: str | None = None,
-        intended_use: str | None = None,
-        should_cancel: Callable[[], bool] | None = None,
-        targets: list[tuple[int, str]] | None = None,
-        credentials: tuple[str, str] | None = None,
-    ) -> dict[int, dict[str, str]]:
-        """Fetches GetPlace values without changing the layer."""
-        if targets is None:
-            targets = self.enrichment_targets(layer)
-        self._validate_enrichment_state(layer, targets)
-        if credentials is None:
-            credentials = self.configuration_handler.get_credentials()
-
-        values_by_feature: dict[int, dict[str, str]] = {}
-        details_by_place_id: dict[str, dict[str, Any]] = {}
-        for feature_id, place_id in targets:
-            self._raise_if_cancelled(should_cancel)
-            if not place_id:
-                continue
-
-            detail = details_by_place_id.get(place_id)
-            if detail is None:
-                self._validate_enrichment_state(layer, targets)
-                try:
-                    detail = self.get_place(
-                        place_id,
-                        list(self.ENRICH_FEATURES),
-                        political_view,
-                        language,
-                        intended_use,
-                        credentials=credentials,
-                    )
-                except RuntimeError as error:
-                    if should_cancel is not None and should_cancel():
-                        raise PlacesOperationCancelledError(
-                            "The GetPlace request was cancelled."
-                        ) from error
-                    raise
-                self._raise_if_cancelled(should_cancel)
-                self._validate_enrichment_state(layer, targets)
-                details_by_place_id[place_id] = detail
-
-            values_by_feature[feature_id] = {
-                self.FIELD_PHONE: first_contact(detail, "Phones"),
-                self.FIELD_WEBSITE: first_contact(detail, "Websites"),
-                self.FIELD_OPENING_HOURS: opening_hours(detail),
-                self.FIELD_TIMEZONE: time_zone_name(detail),
-            }
-
-        self._raise_if_cancelled(should_cancel)
-        self._validate_enrichment_state(layer, targets)
-        return values_by_feature
-
-    @staticmethod
-    def _raise_if_cancelled(
-        should_cancel: Callable[[], bool] | None,
-    ) -> None:
-        """Stops the current operation when the dialog requested cancellation."""
-        if should_cancel is not None and should_cancel():
-            raise PlacesOperationCancelledError("The Places operation was cancelled.")
-
     def apply_feature_details(
         self, layer: QgsVectorLayer, values_by_feature: dict[int, dict[str, str]]
     ) -> int:
@@ -605,31 +531,6 @@ class PlacesFunctions(ServiceFunctionsBase):
                     raise RuntimeError(
                         f"Could not update {name} for feature {feature_id}."
                     )
-
-    def enrich_selected_features(
-        self,
-        layer: Any,
-        political_view: str | None = None,
-        language: str | None = None,
-        intended_use: str | None = None,
-        should_cancel: Callable[[], bool] | None = None,
-    ) -> int:
-        """Fetches Storage GetPlace values and applies them without partial updates."""
-        if intended_use != "Storage":
-            raise ValueError(
-                "GetPlace details can only be applied after a Storage request."
-            )
-        targets = self.enrichment_targets(layer)
-        values = self.fetch_selected_feature_details(
-            layer,
-            political_view,
-            language,
-            intended_use,
-            should_cancel,
-            targets,
-        )
-        self._raise_if_cancelled(should_cancel)
-        return self.apply_feature_details(layer, values)
 
     def enrichment_targets(self, layer: Any) -> list[tuple[int, str]]:
         """
