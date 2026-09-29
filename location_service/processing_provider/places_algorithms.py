@@ -10,6 +10,7 @@ from qgis.core import (
     QgsProcessingContext,
     QgsProcessingException,
     QgsProcessingFeedback,
+    QgsProcessingOutputString,
     QgsProcessingParameterEnum,
     QgsProcessingParameterFeatureSink,
     QgsProcessingParameterFeatureSource,
@@ -62,7 +63,10 @@ class PlacesAlgorithm(LocationServiceAlgorithm):
     LANGUAGE = "LANGUAGE"
     POLITICAL_VIEW = "POLITICAL_VIEW"
     MAX_RESULTS = "MAX_RESULTS"
+    PAGES = "PAGES"
+    NEXT_TOKEN = "NEXT_TOKEN"
     OUTPUT = "OUTPUT"
+    NEXT_PAGE_TOKEN = "NEXT_PAGE_TOKEN"
 
     def add_localization_parameters(self) -> None:
         """Adds the Language and Political View parameters."""
@@ -97,10 +101,40 @@ class PlacesAlgorithm(LocationServiceAlgorithm):
         )
 
     def add_output_parameter(self) -> None:
-        """Adds the point output."""
+        """Adds the point output and the pricing bucket output."""
         self.addParameter(
             QgsProcessingParameterFeatureSink(
                 self.OUTPUT, self.OPERATION, type=compat.SOURCE_POINT
+            )
+        )
+        self.add_pricing_output()
+
+    def add_paging_parameters(self) -> None:
+        """Adds the page count, the starting NextToken and the next-page output."""
+        self.addParameter(
+            compat.set_advanced(
+                QgsProcessingParameterNumber(
+                    self.PAGES,
+                    "Maximum result pages",
+                    type=compat.NUMBER_INTEGER,
+                    defaultValue=1,
+                    minValue=1,
+                    maxValue=MAX_PAGES,
+                )
+            )
+        )
+        self.addParameter(
+            compat.set_advanced(
+                QgsProcessingParameterString(
+                    self.NEXT_TOKEN,
+                    "Start from NextToken (continues an earlier search)",
+                    optional=True,
+                )
+            )
+        )
+        self.addOutput(
+            QgsProcessingOutputString(
+                self.NEXT_PAGE_TOKEN, "NextToken of the following page"
             )
         )
 
@@ -155,20 +189,25 @@ class PlacesAlgorithm(LocationServiceAlgorithm):
 
     def fetch_pages(
         self,
+        parameters: dict[str, Any],
+        context: QgsProcessingContext,
+        feedback: QgsProcessingFeedback,
         places: PlacesFunctions,
         request,
-        max_pages: int,
-        feedback: QgsProcessingFeedback,
-    ) -> list[dict[str, Any]]:
+    ) -> dict[str, Any]:
         """
-        Requests up to ``max_pages`` pages and returns the unique items.
+        Requests the pages and writes the unique items to the output.
 
         ``request`` takes a NextToken (``None`` for the first page). Items
         whose PlaceId was already returned by an earlier page are skipped.
+        The NextToken of the page after the last one is returned as an
+        output so a later run can continue the search.
         """
+        max_pages = self.parameterAsInt(parameters, self.PAGES, context)
+        token = self.parameterAsString(parameters, self.NEXT_TOKEN, context) or None
         items: list[dict[str, Any]] = []
         seen: set[str] = set()
-        token = None
+        next_page_token = ""
         for page in range(max_pages):
             if page:
                 feedback.pushInfo(f"Requesting result page {page + 1}.")
@@ -183,11 +222,15 @@ class PlacesAlgorithm(LocationServiceAlgorithm):
                     seen.add(place_id)
                 items.append(item)
             next_token = result.get("NextToken")
-            if not next_token or next_token == token:
+            # A repeated token would request the same page again.
+            next_page_token = next_token if next_token and next_token != token else ""
+            if not next_page_token:
                 break
-            token = next_token
+            token = next_page_token
             feedback.setProgress(100 * (page + 1) / max_pages)
-        return items
+        results = self.publish(parameters, context, feedback, places, items)
+        results[self.NEXT_PAGE_TOKEN] = next_page_token
+        return results
 
 
 class SearchTextAlgorithm(PlacesAlgorithm):
@@ -203,7 +246,6 @@ class SearchTextAlgorithm(PlacesAlgorithm):
     BIAS_POSITION = "BIAS_POSITION"
     COUNTRIES = "COUNTRIES"
     TRAVEL_MODE = "TRAVEL_MODE"
-    PAGES = "PAGES"
 
     def initAlgorithm(self, config=None) -> None:
         """Defines the SearchText parameters."""
@@ -228,18 +270,7 @@ class SearchTextAlgorithm(PlacesAlgorithm):
             )
         )
         self.add_localization_parameters()
-        self.addParameter(
-            compat.set_advanced(
-                QgsProcessingParameterNumber(
-                    self.PAGES,
-                    "Maximum result pages",
-                    type=compat.NUMBER_INTEGER,
-                    defaultValue=1,
-                    minValue=1,
-                    maxValue=MAX_PAGES,
-                )
-            )
-        )
+        self.add_paging_parameters()
         self.add_output_parameter()
 
     def execute(self, parameters, context, feedback) -> dict[str, Any]:
@@ -255,7 +286,6 @@ class SearchTextAlgorithm(PlacesAlgorithm):
         travel_index = self.parameterAsEnum(parameters, self.TRAVEL_MODE, context)
         travel_mode = capabilities.SEARCH_TRAVEL_MODES[travel_index][1] or None
         language, political_view = self.localization(parameters, context)
-        pages = self.parameterAsInt(parameters, self.PAGES, context)
         features = capabilities.automatic_additional_features(
             self.region, self.OPERATION
         )
@@ -283,8 +313,7 @@ class SearchTextAlgorithm(PlacesAlgorithm):
                 credentials=self.credentials,
             )
 
-        items = self.fetch_pages(places, request, pages, feedback)
-        return self.publish(parameters, context, feedback, places, items)
+        return self.fetch_pages(parameters, context, feedback, places, request)
 
 
 class GeocodeAlgorithm(PlacesAlgorithm):
@@ -463,7 +492,6 @@ class SearchNearbyAlgorithm(PlacesAlgorithm):
 
     POSITION = "POSITION"
     QUERY_RADIUS = "QUERY_RADIUS"
-    PAGES = "PAGES"
 
     def initAlgorithm(self, config=None) -> None:
         """Defines the SearchNearby parameters."""
@@ -480,18 +508,7 @@ class SearchNearbyAlgorithm(PlacesAlgorithm):
         )
         self.add_max_results_parameter()
         self.add_localization_parameters()
-        self.addParameter(
-            compat.set_advanced(
-                QgsProcessingParameterNumber(
-                    self.PAGES,
-                    "Maximum result pages",
-                    type=compat.NUMBER_INTEGER,
-                    defaultValue=1,
-                    minValue=1,
-                    maxValue=MAX_PAGES,
-                )
-            )
-        )
+        self.add_paging_parameters()
         self.add_output_parameter()
 
     def execute(self, parameters, context, feedback) -> dict[str, Any]:
@@ -502,7 +519,6 @@ class SearchNearbyAlgorithm(PlacesAlgorithm):
         radius = self.parameterAsInt(parameters, self.QUERY_RADIUS, context)
         max_results = self.parameterAsInt(parameters, self.MAX_RESULTS, context)
         language, political_view = self.localization(parameters, context)
-        pages = self.parameterAsInt(parameters, self.PAGES, context)
         features = capabilities.automatic_additional_features(
             self.region, self.OPERATION
         )
@@ -529,8 +545,7 @@ class SearchNearbyAlgorithm(PlacesAlgorithm):
                 credentials=self.credentials,
             )
 
-        items = self.fetch_pages(places, request, pages, feedback)
-        return self.publish(parameters, context, feedback, places, items)
+        return self.fetch_pages(parameters, context, feedback, places, request)
 
 
 class GetPlaceAlgorithm(PlacesAlgorithm):
@@ -575,6 +590,7 @@ class GetPlaceAlgorithm(PlacesAlgorithm):
                 self.OUTPUT, "GetPlace details", type=compat.SOURCE_POINT
             )
         )
+        self.add_pricing_output()
 
     def execute(self, parameters, context, feedback) -> dict[str, Any]:
         """Requests the details of each unique PlaceId and writes the copy."""

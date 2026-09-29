@@ -12,6 +12,7 @@ from qgis.core import (
     QgsProcessingException,
     QgsProcessingFeedback,
     QgsProcessingLayerPostProcessorInterface,
+    QgsProcessingOutputString,
     QgsVectorLayer,
 )
 from qgis.PyQt.QtGui import QIcon
@@ -104,7 +105,11 @@ class LocationServiceAlgorithm(QgsProcessingAlgorithm):
     main thread before a background task starts, so reading an encrypted
     API key can prompt for the master password safely. Network requests
     then run in the worker thread and are aborted when the user cancels.
+    The Places and Routes dialogs run the same algorithms synchronously
+    through ``runner.AlgorithmRun``.
     """
+
+    PRICING_BUCKET = "PRICING_BUCKET"
 
     OPERATION = ""
     GROUP = ""
@@ -117,6 +122,10 @@ class LocationServiceAlgorithm(QgsProcessingAlgorithm):
         super().__init__()
         self._credentials: tuple[str, str] | None = None
         self._outputs: dict[str, tuple[str, LayerStyle]] = {}
+        # The original exception of a failed run and the pricing bucket of
+        # the last response, kept for callers that run this instance directly.
+        self.last_error: Exception | None = None
+        self.pricing_bucket: str | None = None
 
     def createInstance(self) -> LocationServiceAlgorithm:
         """Returns a fresh copy of this algorithm."""
@@ -171,11 +180,14 @@ class LocationServiceAlgorithm(QgsProcessingAlgorithm):
         """Captures the configured region and API key before the run starts."""
         try:
             self._credentials = ConfigurationHandler().get_credentials()
-        except AuthDatabaseLockedError as error:
-            raise QgsProcessingException(str(error)) from error
         except ConfigurationError as error:
-            raise QgsProcessingException(f"{error} {CONFIG_MISSING_HINT}") from error
+            self.last_error = error
+            raise QgsProcessingException(self.error_message(error)) from error
         return True
+
+    def add_pricing_output(self) -> None:
+        """Adds the pricing bucket reported by the last response."""
+        self.addOutput(QgsProcessingOutputString(self.PRICING_BUCKET, "Pricing bucket"))
 
     def processAlgorithm(
         self,
@@ -185,24 +197,33 @@ class LocationServiceAlgorithm(QgsProcessingAlgorithm):
     ) -> dict[str, Any]:
         """Runs the operation and reports failures as Processing errors."""
         try:
-            return self.execute(parameters, context, feedback)
-        except QgsProcessingException:
+            results = self.execute(parameters, context, feedback)
+        except QgsProcessingException as error:
+            self.last_error = error
             raise
-        except OperationCancelledError as error:
-            raise QgsProcessingException(str(error)) from error
-        except ConfigurationError as error:
-            raise QgsProcessingException(f"{error} {CONFIG_MISSING_HINT}") from error
-        except ValueError as error:
-            raise QgsProcessingException(redact_secrets(str(error))) from error
-        except ApiError as error:
+        except Exception as error:
+            self.last_error = error
+            raise QgsProcessingException(self.error_message(error)) from error
+        results[self.PRICING_BUCKET] = self.pricing_bucket or ""
+        return results
+
+    def error_message(self, error: Exception) -> str:
+        """Returns the redacted Processing message for a failure."""
+        if isinstance(error, AuthDatabaseLockedError):
+            message = str(error)
+        elif isinstance(error, ConfigurationError):
+            message = f"{error} {CONFIG_MISSING_HINT}"
+        elif isinstance(error, (OperationCancelledError, ValueError)):
+            message = str(error)
+        else:
             message = f"{self.OPERATION} failed: {error}"
-            if error.status_code == 403 and self.PERMISSION_HINT:
+            if (
+                isinstance(error, ApiError)
+                and error.status_code == 403
+                and self.PERMISSION_HINT
+            ):
                 message = f"{message} {self.PERMISSION_HINT}"
-            raise QgsProcessingException(redact_secrets(message)) from error
-        except RuntimeError as error:
-            raise QgsProcessingException(
-                redact_secrets(f"{self.OPERATION} failed: {error}")
-            ) from error
+        return redact_secrets(message)
 
     def execute(
         self,
@@ -257,6 +278,7 @@ class LocationServiceAlgorithm(QgsProcessingAlgorithm):
         finally:
             feedback.canceled.disconnect(api_handler.abort)
             bucket = api_handler.last_pricing_bucket
+            self.pricing_bucket = bucket
             if bucket:
                 feedback.pushInfo(
                     f"The {self.OPERATION} request used the {bucket} pricing bucket."

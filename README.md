@@ -116,14 +116,14 @@ Available functions:
 
 ### Processing Algorithms
 
-The same Places and Routes operations are also available as Processing algorithms of the `Amazon Location Service` provider in the Processing Toolbox, so they can be used in batch processing, the Graphical Modeler, and `qgis_process`. They use the region and API key set in `Config`.
+The Places and Routes dialogs send their requests by running Processing algorithms of the `Amazon Location Service` provider. The same algorithms are available in the Processing Toolbox, so they can also be used in batch processing, the Graphical Modeler, and `qgis_process`. They use the region and API key set in `Config`.
 
 - Places: `SearchText`, `Geocode`, `ReverseGeocode`, `SearchNearby`, `GetPlace (add place details)`
 - Routes: `CalculateRoutes`, `CalculateIsolines`, `SnapToRoads`, `CalculateRouteMatrix`
 
 Point parameters can be picked on the map or entered in any CRS; they are sent as WGS 84. `GetPlace` writes a copy of a point layer with a `PlaceId` field and adds `Phone` / `Website` / `OpeningHours` / `TimeZone` (at most 25 unique PlaceIds). `SearchText` and `SearchNearby` can fetch up to five result pages.
 
-Unlike the dialogs, the algorithms do not ask for billing confirmation: the estimated pricing bucket, the reported pricing bucket, notices, and data attributions are written to the Processing log.
+When run from the Processing Toolbox, the algorithms do not ask for billing confirmation (the Routes dialog still does): the estimated pricing bucket, the reported pricing bucket, notices, and data attributions are written to the Processing log.
 
 ### Terms Function
 

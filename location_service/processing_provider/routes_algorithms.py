@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from datetime import timedelta, timezone
 from typing import Any
 
 from qgis.core import (
@@ -7,6 +9,7 @@ from qgis.core import (
     QgsProcessingContext,
     QgsProcessingException,
     QgsProcessingFeedback,
+    QgsProcessingOutputString,
     QgsProcessingParameterDateTime,
     QgsProcessingParameterEnum,
     QgsProcessingParameterFeatureSink,
@@ -241,6 +244,8 @@ class CalculateRoutesAlgorithm(RoutesAlgorithm):
     TRANSIT_MODES = "TRANSIT_MODES"
     OUTPUT = "OUTPUT"
     OUTPUT_SUMMARY = "OUTPUT_SUMMARY"
+    ATTRIBUTIONS = "ATTRIBUTIONS"
+    NOTICES = "NOTICES"
 
     def initAlgorithm(self, config=None) -> None:
         """Defines the CalculateRoutes parameters."""
@@ -344,6 +349,11 @@ class CalculateRoutesAlgorithm(RoutesAlgorithm):
                 createByDefault=False,
             )
         )
+        self.addOutput(
+            QgsProcessingOutputString(self.ATTRIBUTIONS, "Data attributions (JSON)")
+        )
+        self.addOutput(QgsProcessingOutputString(self.NOTICES, "Notices (JSON)"))
+        self.add_pricing_output()
 
     def _time_options(self, parameters, context) -> dict[str, Any]:
         """Returns the depart/arrival choice as RouteOptions keyword values."""
@@ -357,9 +367,7 @@ class CalculateRoutesAlgorithm(RoutesAlgorithm):
         value = self.parameterAsDateTime(parameters, self.TIME, context)
         if value is None or not value.isValid():
             raise ValueError("Set the departure or arrival time.")
-        # The value is local time; send it with the system UTC offset.
-        iso_time = value.toPyDateTime().astimezone().isoformat(timespec="seconds")
-        return {choice: iso_time}
+        return {choice: iso_time_with_offset(value)}
 
     def _transit_options(self, parameters, context, travel_mode: str) -> dict:
         """Returns the allowed/excluded transit modes for RouteOptions."""
@@ -455,7 +463,8 @@ class CalculateRoutesAlgorithm(RoutesAlgorithm):
 
         routes_results.validate_route_count(result, options.max_alternatives)
         attributions = routes_results.collect_attributions(result)
-        report_route_notices(feedback, routes_results.collect_notices(result))
+        notices = routes_results.collect_notices(result)
+        report_route_notices(feedback, notices)
         report_attributions(feedback, attributions)
         legs = routes_layers.build_route_leg_layer(result)
         if legs is None:
@@ -476,12 +485,15 @@ class CalculateRoutesAlgorithm(RoutesAlgorithm):
         if parameters.get(self.OUTPUT_SUMMARY) is not None:
             summary = routes_layers.build_route_summary_layer(result)
         feedback.pushInfo(routes_success_message(result))
-        return self.publish(
+        results = self.publish(
             parameters,
             context,
             [(self.OUTPUT, legs, False), (self.OUTPUT_SUMMARY, summary, True)],
             attributions,
         )
+        results[self.ATTRIBUTIONS] = json.dumps(attributions)
+        results[self.NOTICES] = json.dumps(notices)
+        return results
 
 
 class CalculateIsolinesAlgorithm(RoutesAlgorithm):
@@ -535,6 +547,7 @@ class CalculateIsolinesAlgorithm(RoutesAlgorithm):
                 self.OUTPUT, self.OPERATION, type=compat.SOURCE_POLYGON
             )
         )
+        self.add_pricing_output()
 
     def execute(self, parameters, context, feedback) -> dict[str, Any]:
         """Sends CalculateIsolines and writes the isoline polygons."""
@@ -609,6 +622,7 @@ class SnapToRoadsAlgorithm(RoutesAlgorithm):
     SNAP_RADIUS = "SNAP_RADIUS"
     OUTPUT = "OUTPUT"
     OUTPUT_POINTS = "OUTPUT_POINTS"
+    NOTICES = "NOTICES"
 
     def initAlgorithm(self, config=None) -> None:
         """Defines the SnapToRoads parameters."""
@@ -658,6 +672,8 @@ class SnapToRoadsAlgorithm(RoutesAlgorithm):
                 createByDefault=True,
             )
         )
+        self.addOutput(QgsProcessingOutputString(self.NOTICES, "Notices (JSON)"))
+        self.add_pricing_output()
 
     def execute(self, parameters, context, feedback) -> dict[str, Any]:
         """Sends SnapToRoads and writes the snapped line and points."""
@@ -725,11 +741,13 @@ class SnapToRoadsAlgorithm(RoutesAlgorithm):
                 line_points, len(rows), len(notices)
             )
             points = routes_layers.build_snap_points_layer(snapped, rows)
-        return self.publish(
+        results = self.publish(
             parameters,
             context,
             [(self.OUTPUT, line, False), (self.OUTPUT_POINTS, points, True)],
         )
+        results[self.NOTICES] = json.dumps(notices)
+        return results
 
 
 class CalculateRouteMatrixAlgorithm(RoutesAlgorithm):
@@ -803,6 +821,7 @@ class CalculateRouteMatrixAlgorithm(RoutesAlgorithm):
                 createByDefault=False,
             )
         )
+        self.add_pricing_output()
 
     def execute(self, parameters, context, feedback) -> dict[str, Any]:
         """Sends CalculateRouteMatrix and writes the table and OD lines."""
@@ -884,6 +903,17 @@ class CalculateRouteMatrixAlgorithm(RoutesAlgorithm):
             context,
             [(self.OUTPUT, table, False), (self.OUTPUT_LINES, lines, True)],
         )
+
+
+def iso_time_with_offset(value) -> str:
+    """
+    Returns a QDateTime as ISO 8601 with its own UTC offset.
+
+    A local time gets the system offset in effect at that time, and a time
+    parsed from text with an offset keeps that offset.
+    """
+    offset = timezone(timedelta(seconds=value.offsetFromUtc()))
+    return value.toPyDateTime().replace(tzinfo=offset).isoformat(timespec="seconds")
 
 
 def routes_success_message(result: dict[str, Any]) -> str:

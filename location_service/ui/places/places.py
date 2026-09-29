@@ -2,7 +2,7 @@ import os
 import re
 from typing import Optional
 
-from qgis.core import QgsProject
+from qgis.core import QgsFeature, QgsProject
 from qgis.PyQt import sip, uic
 from qgis.PyQt.QtWidgets import (
     QAbstractSpinBox,
@@ -17,7 +17,15 @@ from ...functions.places import (
     PlacesFunctions,
     PlacesOperationCancelledError,
 )
-from ...functions.places_storage import drawable_result_items
+from ...processing_provider.inputs import field_text
+from ...processing_provider.places_algorithms import (
+    GeocodeAlgorithm,
+    GetPlaceAlgorithm,
+    ReverseGeocodeAlgorithm,
+    SearchNearbyAlgorithm,
+    SearchTextAlgorithm,
+)
+from ...processing_provider.runner import AlgorithmRun, temporary_output, wgs84_point
 from ...utils.click_handler import (
     MapClickCoordinateUpdater,
     parse_lonlat,
@@ -37,6 +45,30 @@ from ...utils.localization_preferences import LocalizationPreferences
 from ..maps.constants import LANGUAGES, POLITICAL_VIEWS
 from ..style_loader import load_style
 from . import constants
+from .details import fetch_detail_values, political_view_index
+
+ALGORITHMS = {
+    "SearchText": SearchTextAlgorithm,
+    "Geocode": GeocodeAlgorithm,
+    "ReverseGeocode": ReverseGeocodeAlgorithm,
+    "SearchNearby": SearchNearbyAlgorithm,
+}
+
+
+class PlacesPage:
+    """One result page: the styled, unregistered layer and the next token."""
+
+    def __init__(self, layer, next_token: Optional[str]) -> None:
+        self.layer = layer
+        self.next_token = next_token or None
+
+
+def _enum_index(options, value) -> int:
+    """Returns the index of an API value in ``(label, value)`` options."""
+    for index, (_label, option_value) in enumerate(options):
+        if option_value == (value or ""):
+            return index
+    raise ValueError(f"Unsupported option: {value!r}")
 
 
 class PlacesUi(QDialog):
@@ -53,6 +85,7 @@ class PlacesUi(QDialog):
         self.places = PlacesFunctions()
         self.localization_preferences = LocalizationPreferences()
         self._map_click = None
+        self._active_run: Optional[AlgorithmRun] = None
         self._cancelled = False
         self._busy = False
         self._active_function = None
@@ -177,7 +210,7 @@ class PlacesUi(QDialog):
         """Cancels active work and refreshes controls after settings change."""
         if self._busy:
             self._cancelled = True
-            self.places.api_handler.abort()
+            self._abort_active_run()
         self._clear_pagination()
         self._apply_region_capabilities()
 
@@ -341,7 +374,7 @@ class PlacesUi(QDialog):
             intended_use = "Storage"
             self._validate_request_options(request, intended_use)
             with busy_operation(self.button_search, "Searching…"):
-                result = self._send_request(request, intended_use)
+                page = self._send_request(request, intended_use)
             if self._cancelled:
                 return
             self._save_localization_preferences(
@@ -350,16 +383,14 @@ class PlacesUi(QDialog):
                 save_political_view=request["political_view_enabled"],
                 save_language=request.get("save_language", True),
             )
-            if not self._has_drawable_results(result):
+            if not page.layer.featureCount():
                 push_message(INFO, f"{function} returned no drawable results.")
                 return
-            layer = self.places.add_point_layer(
-                result,
-                function,
-                intended_use=intended_use,
-            )
+            layer = page.layer
+            if QgsProject.instance().addMapLayer(layer) is None:
+                raise RuntimeError("Could not add the Places layer to the project.")
             iface.setActiveLayer(layer)
-            self._set_pagination(request, layer, result)
+            self._set_pagination(request, layer, page.next_token)
         except Exception as e:
             self._report_search_error(e)
             return
@@ -371,11 +402,6 @@ class PlacesUi(QDialog):
                 constants.SEARCH_BUTTON_LABEL.get(self._current_function(), "Search")
             )
         push_message(SUCCESS, f"Added the “{function}” layer.")
-
-    @staticmethod
-    def _has_drawable_results(result: dict) -> bool:
-        """Returns whether a response contains at least one drawable item."""
-        return bool(drawable_result_items(result))
 
     def _build_request(
         self, function: str, position: Optional[list], max_results: int
@@ -433,10 +459,8 @@ class PlacesUi(QDialog):
         request: dict,
         intended_use: Optional[str],
         next_token: Optional[str] = None,
-    ) -> dict:
-        """Validates region capabilities and sends one captured request."""
-        function = request["function"]
-        position = request["position"]
+    ) -> PlacesPage:
+        """Validates region capabilities and runs one captured request."""
         credentials = request["credentials"]
         if credentials != self.places.configuration_handler.get_credentials():
             raise ValueError(
@@ -445,67 +469,64 @@ class PlacesUi(QDialog):
                 "Run the search again."
             )
         self._validate_request_options(request, intended_use)
+        if intended_use != "Storage":
+            raise ValueError(
+                "Places results can only be added to QGIS after a Storage request."
+            )
+        run = self._start_run(ALGORITHMS[request["function"]])
+        try:
+            results = run.run(self._algorithm_parameters(request, next_token))
+            layer = run.take_layer(results, "OUTPUT")
+        finally:
+            self._active_run = None
+        if layer is None:
+            raise RuntimeError("The Places algorithm returned no layer.")
+        return PlacesPage(layer, results.get("NEXT_PAGE_TOKEN"))
 
+    @staticmethod
+    def _algorithm_parameters(request: dict, next_token: Optional[str]) -> dict:
+        """Returns the Processing parameters of one captured request."""
+        function = request["function"]
+        position = request["position"]
+        parameters = {
+            "MAX_RESULTS": request["max_results"],
+            "LANGUAGE": request["language"] or "",
+            "POLITICAL_VIEW": political_view_index(request["political_view"]),
+            "OUTPUT": temporary_output(),
+        }
+        if function in ("SearchText", "Geocode"):
+            parameters["QUERY"] = request["text"]
+            parameters["COUNTRIES"] = ",".join(request["countries"] or [])
+            parameters["BIAS_POSITION"] = wgs84_point(position) if position else None
+        else:
+            parameters["POSITION"] = wgs84_point(position)
         if function == "SearchText":
-            lon, lat = position
-            return self.places.search_text(
-                request["text"],
-                request["max_results"],
-                lon,
-                lat,
-                include_countries=request["countries"],
-                travel_mode=request["travel_mode"],
-                additional_features=request["additional_features"],
-                political_view=request["political_view"],
-                language=request["language"],
-                intended_use=intended_use,
-                next_token=next_token,
-                credentials=credentials,
+            parameters["TRAVEL_MODE"] = _enum_index(
+                constants.SEARCH_TRAVEL_MODES, request["travel_mode"]
             )
-        if function == "Geocode":
-            lon, lat = position if position else (None, None)
-            return self.places.geocode(
-                request["text"],
-                request["max_results"],
-                lon,
-                lat,
-                include_countries=request["countries"],
-                address_names_mode=request["address_names_mode"],
-                postal_code_mode=request["postal_code_mode"],
-                political_view=request["political_view"],
-                language=request["language"],
-                intended_use=intended_use,
-                additional_features=request["additional_features"],
-                credentials=credentials,
+        elif function == "Geocode":
+            parameters["ADDRESS_NAMES_MODE"] = _enum_index(
+                constants.ADDRESS_NAMES_MODES, request["address_names_mode"]
             )
-        if function == "ReverseGeocode":
-            lon, lat = position
-            return self.places.reverse_geocode(
-                lon,
-                lat,
-                request["max_results"],
-                request["query_radius"],
-                political_view=request["political_view"],
-                language=request["language"],
-                intended_use=intended_use,
-                additional_features=request["additional_features"],
-                credentials=credentials,
+            parameters["POSTAL_CODE_MODE"] = _enum_index(
+                constants.POSTAL_CODE_MODES, request["postal_code_mode"]
             )
-        if function == "SearchNearby":
-            lon, lat = position
-            return self.places.search_nearby(
-                lon,
-                lat,
-                request["query_radius"],
-                request["max_results"],
-                additional_features=request["additional_features"],
-                political_view=request["political_view"],
-                language=request["language"],
-                intended_use=intended_use,
-                next_token=next_token,
-                credentials=credentials,
-            )
-        raise ValueError(f"Unknown function: {function}")
+        else:
+            parameters["QUERY_RADIUS"] = request["query_radius"] or 0
+        if function in ("SearchText", "SearchNearby"):
+            parameters["PAGES"] = 1
+            parameters["NEXT_TOKEN"] = next_token or ""
+        return parameters
+
+    def _start_run(self, algorithm_class) -> AlgorithmRun:
+        """Creates the algorithm run that closing the dialog cancels."""
+        self._active_run = AlgorithmRun(algorithm_class)
+        return self._active_run
+
+    def _abort_active_run(self) -> None:
+        """Cancels the running algorithm, if any."""
+        if self._active_run is not None:
+            self._active_run.cancel()
 
     @staticmethod
     def _validate_request_options(request: dict, intended_use: Optional[str]) -> None:
@@ -520,9 +541,8 @@ class PlacesUi(QDialog):
             query_radius=request.get("query_radius"),
         )
 
-    def _set_pagination(self, request: dict, layer, result: dict) -> None:
+    def _set_pagination(self, request: dict, layer, token: Optional[str]) -> None:
         """Stores the state required by the explicit Load More action."""
-        token = result.get("NextToken")
         if request["function"] not in {"SearchText", "SearchNearby"} or not token:
             self._clear_pagination()
             return
@@ -657,7 +677,7 @@ class PlacesUi(QDialog):
             if not self._pagination_credentials_are_current(request) or self._cancelled:
                 return
             with busy_operation(self.button_load_more, "Loading…"):
-                result = self._send_request(request, "Storage", self._next_token)
+                page = self._send_request(request, "Storage", self._next_token)
             if self._cancelled:
                 self._clear_pagination()
                 return
@@ -668,7 +688,7 @@ class PlacesUi(QDialog):
                 return
             if not self._loaded_page_target_is_valid(layer, place_ids_before):
                 return
-            added_count = self._append_result_page(layer, request, result)
+            added_count = self._append_result_page(layer, page)
             self._show_page_added_message(added_count)
         except Exception as error:
             self._report_search_error(error)
@@ -678,20 +698,21 @@ class PlacesUi(QDialog):
                 bool(self._pagination_request and self._next_token)
             )
 
-    def _append_result_page(self, layer, request: dict, result: dict) -> Optional[int]:
+    def _append_result_page(self, layer, page: PlacesPage) -> Optional[int]:
         """Validates and appends one page, then advances its token."""
         try:
-            new_items, new_place_ids = self._new_page_items(result)
-            added_count = self.places.add_features(
-                layer,
-                {"ResultItems": new_items},
-                request["function"],
-            )
+            features, new_place_ids = self._new_page_features(layer, page.layer)
+            added_count = 0
+            if features:
+                added, stored = layer.dataProvider().addFeatures(features)
+                if not added:
+                    raise RuntimeError("Could not add Places features to the layer.")
+                added_count = len(stored)
             self._pagination_place_ids.update(new_place_ids)
             layer.updateExtents()
             layer.triggerRepaint()
 
-            next_token = result.get("NextToken")
+            next_token = page.next_token
             self._next_token = None if next_token == self._next_token else next_token
         except Exception:
             self._clear_pagination()
@@ -704,20 +725,26 @@ class PlacesUi(QDialog):
         if added_count is not None:
             push_message(SUCCESS, f"Added {added_count} more place result(s).")
 
-    def _new_page_items(self, result: dict) -> tuple[list, set[str]]:
-        """Returns drawable page items not already present in the layer."""
-        items = []
+    def _new_page_features(self, layer, page_layer) -> tuple[list, set[str]]:
+        """Returns copies of the page features not already present in the layer."""
+        features = []
         place_ids = set()
-        for item in drawable_result_items(result):
-            place_id = str(item.get("PlaceId") or "")
+        fields = layer.fields()
+        for page_feature in page_layer.getFeatures():
+            place_id = field_text(page_feature, PlacesFunctions.FIELD_PLACE_ID)
             if place_id and (
                 place_id in self._pagination_place_ids or place_id in place_ids
             ):
                 continue
-            items.append(item)
+            feature = QgsFeature(fields)
+            feature.setGeometry(page_feature.geometry())
+            for field in page_layer.fields():
+                if fields.indexOf(field.name()) >= 0:
+                    feature.setAttribute(field.name(), page_feature[field.name()])
+            features.append(feature)
             if place_id:
                 place_ids.add(place_id)
-        return items, place_ids
+        return features, place_ids
 
     def _report_search_error(self, error: Exception) -> None:
         """Handles a search failure and clears pagination after cancellation."""
@@ -786,7 +813,7 @@ class PlacesUi(QDialog):
         targets: list[tuple[int, str]],
         credentials: tuple[str, str],
     ) -> dict:
-        """Validates and fetches GetPlace values without changing the layer."""
+        """Runs GetPlace for the selected features without changing the layer."""
         constants.validate_region_options(
             credentials[0],
             "GetPlace",
@@ -795,15 +822,24 @@ class PlacesUi(QDialog):
             additional_features=list(PlacesFunctions.ENRICH_FEATURES),
             intended_use=intended_use,
         )
-        return self.places.fetch_selected_feature_details(
-            layer,
-            political_view=political_view,
-            language=language,
-            intended_use=intended_use,
-            should_cancel=lambda: self._cancelled,
-            targets=targets,
-            credentials=credentials,
-        )
+        if credentials != self.places.configuration_handler.get_credentials():
+            raise ValueError(
+                "The configured region or API key changed after this update "
+                "started. Run it again."
+            )
+        run = self._start_run(GetPlaceAlgorithm)
+        try:
+            return fetch_detail_values(
+                self.places,
+                layer,
+                targets,
+                run,
+                language=language,
+                political_view=political_view,
+                intended_use=intended_use,
+            )
+        finally:
+            self._active_run = None
 
     def _report_enrich_error(self, error: Exception) -> None:
         """Shows a detail update failure unless the dialog was closed mid-request."""
@@ -845,5 +881,5 @@ class PlacesUi(QDialog):
         if event.spontaneous():
             return
         self._cancelled = True
-        self.places.api_handler.abort()
+        self._abort_active_run()
         release_map_tool(self._map_click)

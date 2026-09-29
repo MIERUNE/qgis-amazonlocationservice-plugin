@@ -116,14 +116,14 @@ QGISでAmazon Location Service v2の機能を利用するプラグインです�
 
 ### Processingアルゴリズム
 
-Places / Routes と同じ機能は、Processingツールボックスの `Amazon Location Service` プロバイダのProcessingアルゴリズムとしても利用できます。バッチ処理・グラフィカルモデラー・`qgis_process` から実行でき、`Config`で設定したリージョンとAPIキーを使用します。
+Places / Routes のダイアログは、`Amazon Location Service` プロバイダのProcessingアルゴリズムを実行してリクエストを送信します。同じアルゴリズムはProcessingツールボックスからも利用でき、バッチ処理・グラフィカルモデラー・`qgis_process` から実行できます。`Config`で設定したリージョンとAPIキーを使用します。
 
 - Places: `SearchText`、`Geocode`、`ReverseGeocode`、`SearchNearby`、`GetPlace (add place details)`
 - Routes: `CalculateRoutes`、`CalculateIsolines`、`SnapToRoads`、`CalculateRouteMatrix`
 
 位置パラメータは地図上のクリックや任意のCRSの座標で指定でき、WGS 84に変換して送信します。`GetPlace`は`PlaceId`フィールドを持つポイントレイヤをコピーし、`Phone` / `Website` / `OpeningHours` / `TimeZone`を追加します（一意なPlaceIdは最大25件）。`SearchText`と`SearchNearby`は最大5ページまで取得できます。
 
-ダイアログと異なり、アルゴリズムは課金の確認ダイアログを表示しません。課金区分の見積もり、料金バケット、Notices、データ帰属表示はProcessingのログに出力されます。
+Processingツールボックスから実行した場合、アルゴリズムは課金の確認ダイアログを表示しません（Routesダイアログからの実行では従来通り確認します）。課金区分の見積もり、料金バケット、Notices、データ帰属表示はProcessingのログに出力されます。
 
 ### Terms機能
 

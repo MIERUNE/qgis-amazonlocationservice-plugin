@@ -1,3 +1,4 @@
+import json
 import unittest
 from contextlib import contextmanager
 from unittest.mock import patch
@@ -17,7 +18,7 @@ if HAS_QGIS:
         QgsProject,
         QgsVectorLayer,
     )
-    from qgis.PyQt.QtCore import QVariant
+    from qgis.PyQt.QtCore import QDateTime, Qt, QVariant
 
     from location_service.functions.places import PlacesFunctions
     from location_service.processing_provider.base import LayerStyle
@@ -37,12 +38,18 @@ if HAS_QGIS:
         CalculateRouteMatrixAlgorithm,
         CalculateRoutesAlgorithm,
         SnapToRoadsAlgorithm,
+        iso_time_with_offset,
+    )
+    from location_service.processing_provider.runner import (
+        AlgorithmRun,
+        temporary_output,
+        wgs84_point,
     )
     from location_service.utils.configuration_handler import (
         ConfigurationError,
         ConfigurationHandler,
     )
-    from location_service.utils.external_api_handler import ExternalApiHandler
+    from location_service.utils.external_api_handler import ApiError, ExternalApiHandler
 
     class _Feedback(QgsProcessingFeedback):
         """Collects the messages an algorithm reports."""
@@ -614,6 +621,105 @@ class TestRoutesAlgorithms(ProcessingTestCase):
         )
         assert not ok
         assert self.posts == []
+
+
+class TestAlgorithmRun(ProcessingTestCase):
+    """Checks the synchronous runner the dialogs use."""
+
+    def run_directly(self, algorithm_class, parameters):
+        """Runs through AlgorithmRun with the fake service."""
+        run = AlgorithmRun(algorithm_class)
+        with self.fake_service():
+            return run, run.run(parameters)
+
+    def test_reraises_the_original_error(self):
+        self.credentials = GRAB_CREDENTIALS
+        with self.assertRaisesRegex(ValueError, "Geocode is not supported"):
+            self.run_directly(
+                GeocodeAlgorithm, {"QUERY": "Singapore", "OUTPUT": temporary_output()}
+            )
+        assert self.posts == []
+
+    def test_reraises_a_configuration_error(self):
+        run = AlgorithmRun(SearchTextAlgorithm)
+        with (
+            patch.object(
+                ConfigurationHandler,
+                "get_credentials",
+                side_effect=ConfigurationError("Missing region"),
+            ),
+            self.assertRaisesRegex(ConfigurationError, "Missing region"),
+        ):
+            run.run(
+                {"QUERY": "cafe", "BIAS_POSITION": TOKYO, "OUTPUT": temporary_output()}
+            )
+
+    def test_keeps_the_http_status_and_the_pricing_bucket(self):
+        def forbidden(handler, url, body):
+            handler.last_pricing_bucket = "PlacesCore"
+            raise ApiError("denied", status_code=403)
+
+        run = AlgorithmRun(SearchTextAlgorithm)
+        with (
+            patch.object(
+                ConfigurationHandler, "get_credentials", return_value=CREDENTIALS
+            ),
+            patch.object(ExternalApiHandler, "send_json_post_request", forbidden),
+            self.assertRaises(ApiError) as caught,
+        ):
+            run.run(
+                {"QUERY": "cafe", "BIAS_POSITION": TOKYO, "OUTPUT": temporary_output()}
+            )
+        assert caught.exception.status_code == 403
+        assert run.pricing_bucket == "PlacesCore"
+
+    def test_takes_a_styled_unregistered_layer_and_the_next_token(self):
+        self.responses = [
+            {
+                "ResultItems": [
+                    {"Title": "A", "PlaceId": "a", "Position": [139.7, 35.6]}
+                ],
+                "NextToken": "token-2",
+            }
+        ]
+        run, results = self.run_directly(
+            SearchNearbyAlgorithm,
+            {
+                "POSITION": wgs84_point((139.7, 35.6)),
+                "NEXT_TOKEN": "token-1",
+                "OUTPUT": temporary_output(),
+            },
+        )
+        assert self.posts[0][1]["NextToken"] == "token-1"
+        assert results["NEXT_PAGE_TOKEN"] == "token-2"
+        layer = run.take_layer(results, "OUTPUT")
+        assert layer.name() == "SearchNearby"
+        assert layer.labelsEnabled()
+        assert PlacesFunctions().is_places_layer(layer)
+        assert self.project.mapLayer(layer.id()) is None
+
+    def test_routes_outputs_carry_attributions_and_notices(self):
+        response = _route_response()
+        response["Routes"][0]["Legs"][0]["VehicleLegDetails"]["Notices"] = [
+            {"Code": "TollsDataUnavailable", "Impact": "Low"}
+        ]
+        self.responses = [response]
+        _run, results = self.run_directly(
+            CalculateRoutesAlgorithm,
+            {
+                "ORIGIN": wgs84_point((139.7, 35.6)),
+                "DESTINATION": wgs84_point((139.8, 35.7)),
+                "OUTPUT": temporary_output(),
+            },
+        )
+        notices = json.loads(results["NOTICES"])
+        assert [notice["code"] for notice in notices] == ["TollsDataUnavailable"]
+        assert json.loads(results["ATTRIBUTIONS"]) == []
+        assert results["PRICING_BUCKET"] == ""
+
+    def test_iso_time_keeps_the_offset_of_the_value(self):
+        value = QDateTime.fromString("2026-03-01T09:30:00+09:00", Qt.DateFormat.ISODate)
+        assert iso_time_with_offset(value) == "2026-03-01T09:30:00+09:00"
 
 
 @unittest.skipUnless(HAS_QGIS, "QGIS runtime is required")
