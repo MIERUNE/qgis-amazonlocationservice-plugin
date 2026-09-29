@@ -114,21 +114,25 @@ Available functions:
 
 ※ As of August 2026, `OptimizeWaypoints` is not supported.
 
-### Processing Algorithms
-
-The Places and Routes dialogs send their requests by running Processing algorithms of the `Amazon Location Service` provider. The same algorithms are available in the Processing Toolbox, so they can also be used in batch processing, the Graphical Modeler, and `qgis_process`. They use the region and API key set in `Config`.
-
-- Places: `SearchText`, `Geocode`, `ReverseGeocode`, `SearchNearby`, `GetPlace (add place details)`
-- Routes: `CalculateRoutes`, `CalculateIsolines`, `SnapToRoads`, `CalculateRouteMatrix`
-
-Point parameters can be picked on the map or entered in any CRS; they are sent as WGS 84. `GetPlace` writes a copy of a point layer with a `PlaceId` field and adds `Phone` / `Website` / `OpeningHours` / `TimeZone` (at most 25 unique PlaceIds). `SearchText` and `SearchNearby` can fetch up to five result pages.
-
-When run from the Processing Toolbox, the algorithms do not ask for billing confirmation (the Routes dialog still does): the estimated pricing bucket, the reported pricing bucket, notices, and data attributions are written to the Processing log.
-
 ### Terms Function
 
 1. Click the `Terms` menu
 2. The Terms of Use page will be displayed in your browser.
+
+### Processing Function
+
+The Places and Routes functions are also available in the Processing Toolbox.
+
+1. Open the QGIS Processing Toolbox
+2. Choose a function under `Amazon Location Service` → `Places` or `Routes`
+3. Set the parameters and output destination
+4. Click the run button
+5. Results are output as layers or tables
+
+Available functions:
+
+- Places: `SearchText`, `Geocode`, `ReverseGeocode`, `SearchNearby`, `GetPlace (add place details)`
+- Routes: `CalculateRoutes`, `CalculateIsolines`, `SnapToRoads`, `CalculateRouteMatrix`
 
 ### Terms
 

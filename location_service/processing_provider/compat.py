@@ -8,7 +8,6 @@ old class-level names, while QGIS 3.34 only has the class-level names.
 from qgis.core import (
     Qgis,
     QgsProcessing,
-    QgsProcessingAlgorithm,
     QgsProcessingParameterDateTime,
     QgsProcessingParameterDefinition,
     QgsProcessingParameterField,
@@ -38,9 +37,6 @@ SOURCE_TABLE = _pick("ProcessingSourceType", "Vector", QgsProcessing, "TypeVecto
 NUMBER_INTEGER = _pick(
     "ProcessingNumberParameterType", "Integer", QgsProcessingParameterNumber, "Integer"
 )
-NUMBER_DOUBLE = _pick(
-    "ProcessingNumberParameterType", "Double", QgsProcessingParameterNumber, "Double"
-)
 
 FIELD_ANY = _pick(
     "ProcessingFieldParameterDataType", "Any", QgsProcessingParameterField, "Any"
@@ -64,13 +60,6 @@ FLAG_ADVANCED = _pick(
     "Advanced",
     QgsProcessingParameterDefinition,
     "FlagAdvanced",
-)
-
-ALGORITHM_FLAG_REQUIRES_PROJECT = _pick(
-    "ProcessingAlgorithmFlag",
-    "RequiresProject",
-    QgsProcessingAlgorithm,
-    "FlagRequiresProject",
 )
 
 

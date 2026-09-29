@@ -53,8 +53,8 @@ class TestPluginStartup(unittest.TestCase):
         baseline_provider = registry.providerById(PROVIDER_ID)
         try:
             plugin = classFactory(qgis_iface)
-            toolbar = plugin.toolbar
             plugin.initGui()
+            toolbar = plugin.toolbar
             assert len(plugin.actions) == 5
             assert registry.providerById(PROVIDER_ID) is not None
             if baseline_provider is None:
@@ -105,9 +105,9 @@ class TestPluginStartup(unittest.TestCase):
 
         for _ in range(2):
             plugin = classFactory(qgis_iface)
-            toolbar = plugin.toolbar
             try:
                 plugin.initGui()
+                toolbar = plugin.toolbar
                 actions = list(plugin.actions)
                 assert len(actions) == 5
                 assert len(self.location_service_toolbars()) == baseline + 1
@@ -121,6 +121,7 @@ class TestPluginStartup(unittest.TestCase):
 
     def test_saved_config_refreshes_open_places_region_capabilities(self):
         plugin = classFactory(qgis_iface)
+        plugin.initGui()
         try:
             plugin.show_places()
             QApplication.processEvents()
@@ -142,6 +143,7 @@ class TestPluginStartup(unittest.TestCase):
 
     def test_places_footer_fits_at_minimum_width(self):
         plugin = classFactory(qgis_iface)
+        plugin.initGui()
         try:
             dialog = plugin.places
             dialog.resize(dialog.minimumWidth(), dialog.height())
@@ -181,6 +183,7 @@ class TestPluginStartup(unittest.TestCase):
 
     def test_places_language_popup_uses_dark_text(self):
         plugin = classFactory(qgis_iface)
+        plugin.initGui()
         try:
             plugin.show_places()
             dialog = plugin.places
@@ -196,6 +199,7 @@ class TestPluginStartup(unittest.TestCase):
 
     def test_terms_browser_failure_shows_error(self):
         plugin = classFactory(qgis_iface)
+        plugin.initGui()
         try:
             with (
                 patch(
@@ -214,6 +218,34 @@ class TestPluginStartup(unittest.TestCase):
         finally:
             plugin.unload()
             self.process_deferred_deletes()
+
+
+@unittest.skipUnless(HAS_QGIS, "QGIS runtime is required")
+class TestStartupWithoutInterface(unittest.TestCase):
+    """qgis_process creates the plugin with ``iface=None`` and only uses Processing."""
+
+    def test_init_processing_and_unload_without_an_interface(self):
+        # The QGIS test runner may already have loaded the plugin itself.
+        registry = QgsApplication.processingRegistry()
+        baseline_provider = registry.providerById(PROVIDER_ID)
+        plugin = classFactory(None)
+        try:
+            assert plugin.toolbar is None
+            assert plugin.places is None
+            plugin.initProcessing()
+            provider = registry.providerById(PROVIDER_ID)
+            assert provider is not None
+            if baseline_provider is None:
+                assert provider is plugin.provider
+                assert len(provider.algorithms()) == 9
+        finally:
+            plugin.unload()
+        assert registry.providerById(PROVIDER_ID) is baseline_provider
+
+    def test_unload_before_init_gui_is_safe(self):
+        plugin = classFactory(None)
+        plugin.unload()
+        assert plugin.actions == []
 
 
 if __name__ == "__main__":

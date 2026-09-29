@@ -1,5 +1,7 @@
+import gc
 import json
 import unittest
+import weakref
 from contextlib import contextmanager
 from unittest.mock import patch
 
@@ -20,8 +22,14 @@ if HAS_QGIS:
     )
     from qgis.PyQt.QtCore import QDateTime, Qt, QVariant
 
+    from location_service.functions import routes_layers
     from location_service.functions.places import PlacesFunctions
+    from location_service.functions.routes_requests import (
+        MAX_WAYPOINTS,
+        ROUTES_TRAVEL_MODES,
+    )
     from location_service.processing_provider.base import LayerStyle
+    from location_service.processing_provider.inputs import iso_time_with_offset
     from location_service.processing_provider.places_algorithms import (
         GeocodeAlgorithm,
         GetPlaceAlgorithm,
@@ -34,11 +42,11 @@ if HAS_QGIS:
         LocationServiceProvider,
     )
     from location_service.processing_provider.routes_algorithms import (
+        TIME_CHOICES,
         CalculateIsolinesAlgorithm,
         CalculateRouteMatrixAlgorithm,
         CalculateRoutesAlgorithm,
         SnapToRoadsAlgorithm,
-        iso_time_with_offset,
     )
     from location_service.processing_provider.runner import (
         AlgorithmRun,
@@ -621,6 +629,285 @@ class TestRoutesAlgorithms(ProcessingTestCase):
         )
         assert not ok
         assert self.posts == []
+
+
+def _snap_response(with_line=True):
+    """Returns a SnapToRoads reply for (139.70, 35.60) and (139.71, 35.61)."""
+    response = {
+        "SnappedTracePoints": [
+            {
+                "OriginalPosition": [139.70, 35.60],
+                "SnappedPosition": [139.70, 35.60],
+                "Confidence": 0.9,
+            },
+            {
+                "OriginalPosition": [139.71, 35.61],
+                "SnappedPosition": [139.71, 35.61],
+                "Confidence": 0.8,
+            },
+        ]
+    }
+    if with_line:
+        response["SnappedGeometry"] = {"LineString": [[139.70, 35.60], [139.71, 35.61]]}
+    return response
+
+
+class TestRoutesInputsAndOutputs(ProcessingTestCase):
+    """Time zones, ignored inputs, empty outputs and output names (Routes)."""
+
+    DEPART_NOW = [value for _label, value in TIME_CHOICES].index("depart_now")
+    DEPARTURE = [value for _label, value in TIME_CHOICES].index("departure_time")
+    TRANSIT = ROUTES_TRAVEL_MODES.index("Transit")
+    INTERMODAL = ROUTES_TRAVEL_MODES.index("Intermodal")
+
+    def run_routes(self, extra, response=None):
+        """Runs CalculateRoutes from Tokyo to Shinjuku with extra parameters."""
+        self.responses = [_route_response() if response is None else response]
+        parameters = {"ORIGIN": TOKYO, "DESTINATION": SHINJUKU, "OUTPUT": "memory:"}
+        parameters.update(extra)
+        return self.run_algorithm(CalculateRoutesAlgorithm, parameters)
+
+    def test_a_departure_time_keeps_the_offset_of_the_text(self):
+        for text, sent in (
+            ("2026-01-01T00:00:00Z", "2026-01-01T00:00:00+00:00"),
+            ("2025-12-31T19:00:00-05:00", "2025-12-31T19:00:00-05:00"),
+        ):
+            with self.subTest(text=text):
+                self.posts = []
+                _results, ok = self.run_routes(
+                    {"TIME_CHOICE": self.DEPARTURE, "TIME": text}
+                )
+                assert ok, self.feedback.errors
+                assert self.posts[0][1]["DepartureTime"] == sent
+
+    def test_a_time_without_a_choice_is_ignored_with_a_warning(self):
+        for choice in (0, self.DEPART_NOW):
+            with self.subTest(choice=choice):
+                self.posts = []
+                self.feedback.warnings.clear()
+                _results, ok = self.run_routes(
+                    {"TIME_CHOICE": choice, "TIME": "2026-01-01T00:00:00Z"}
+                )
+                assert ok, self.feedback.errors
+                body = self.posts[0][1]
+                assert "DepartureTime" not in body
+                assert "ArrivalTime" not in body
+                assert any(
+                    "time was ignored" in text for text in self.feedback.warnings
+                )
+
+    def test_a_field_name_matches_like_qgis_does(self):
+        waypoints = self.add_layer(
+            _point_layer(
+                [(139.75, 35.65, {"seq": 2}), (139.72, 35.62, {"seq": 1})],
+                (("seq", QVariant.Int),),
+            )
+        )
+        _results, ok = self.run_routes(
+            {"WAYPOINTS": waypoints.id(), "WAYPOINTS_ORDER_FIELD": "SEQ"}
+        )
+        assert ok, self.feedback.errors
+        positions = [point["Position"] for point in self.posts[0][1]["Waypoints"]]
+        assert positions == [[139.72, 35.62], [139.75, 35.65]]
+
+    def test_datetime_timestamps_keep_their_instant(self):
+        start = QDateTime.fromString("2026-01-01T00:00:00Z", Qt.DateFormat.ISODate)
+        trace = self.add_layer(
+            _point_layer(
+                [
+                    (139.70, 35.60, {"t": start}),
+                    (139.71, 35.61, {"t": start.addSecs(60)}),
+                ],
+                (("t", QVariant.DateTime),),
+            )
+        )
+        self.responses = [_snap_response()]
+        _results, ok = self.run_algorithm(
+            SnapToRoadsAlgorithm,
+            {"INPUT": trace.id(), "TIMESTAMP_FIELD": "t", "OUTPUT": "memory:"},
+        )
+        assert ok, self.feedback.errors
+        sent = [
+            QDateTime.fromString(point["Timestamp"], Qt.DateFormat.ISODate)
+            for point in self.posts[0][1]["TracePoints"]
+        ]
+        assert sent == [start, start.addSecs(60)]
+
+    def test_a_datetime_order_field_sorts_chronologically(self):
+        start = QDateTime.fromString("2026-09-29T09:05:00Z", Qt.DateFormat.ISODate)
+        waypoints = self.add_layer(
+            _point_layer(
+                [
+                    (139.72, 35.62, {"t": start.addSecs(55 * 60)}),
+                    (139.70, 35.60, {"t": start}),
+                    (139.71, 35.61, {"t": start.addSecs(5 * 60)}),
+                ],
+                (("t", QVariant.DateTime),),
+            )
+        )
+        _results, ok = self.run_routes(
+            {"WAYPOINTS": waypoints.id(), "WAYPOINTS_ORDER_FIELD": "t"}
+        )
+        assert ok, self.feedback.errors
+        positions = [point["Position"] for point in self.posts[0][1]["Waypoints"]]
+        assert positions == [[139.70, 35.60], [139.71, 35.61], [139.72, 35.62]]
+
+    def test_an_unknown_field_name_is_reported_before_sending(self):
+        waypoints = self.add_layer(_point_layer([(139.75, 35.65, {})]))
+        _results, ok = self.run_routes(
+            {"WAYPOINTS": waypoints.id(), "WAYPOINTS_ORDER_FIELD": "missing"}
+        )
+        assert not ok
+        assert any("no field 'missing'" in text for text in self.feedback.errors)
+        assert self.posts == []
+
+    def test_transit_does_not_read_the_ignored_waypoint_layer(self):
+        too_many = self.add_layer(
+            _point_layer(
+                [(139.70 + i * 0.001, 35.60, {}) for i in range(MAX_WAYPOINTS + 1)]
+            )
+        )
+        _results, ok = self.run_routes(
+            {"TRAVEL_MODE": self.TRANSIT, "WAYPOINTS": too_many.id()}
+        )
+        assert ok, self.feedback.errors
+        assert "Waypoints" not in self.posts[0][1]
+        assert any("Waypoints do not apply" in text for text in self.feedback.warnings)
+
+    def test_intermodal_reports_the_ignored_transit_filter_and_optimize_for(self):
+        _results, ok = self.run_routes(
+            {
+                "TRAVEL_MODE": self.INTERMODAL,
+                "TRANSIT_FILTER": 1,
+                "TRANSIT_MODES": [0],
+                "OPTIMIZE_FOR": 1,
+            }
+        )
+        assert ok, self.feedback.errors
+        warnings = " ".join(self.feedback.warnings)
+        assert "transit mode filter" in warnings
+        assert "Optimize for" in warnings
+
+    def test_empty_routes_still_write_the_requested_summary(self):
+        results, ok = self.run_routes(
+            {"OUTPUT_SUMMARY": "memory:"}, response={"Routes": []}
+        )
+        assert ok, self.feedback.errors
+        summary = self.output(results, "OUTPUT_SUMMARY")
+        assert summary.featureCount() == 0
+        expected = [name for name, _kind in routes_layers.ROUTE_SUMMARY_FIELDS]
+        assert summary.fields().names() == expected
+
+    def test_an_unrequested_summary_is_still_omitted(self):
+        results, ok = self.run_routes({}, response={"Routes": []})
+        assert ok, self.feedback.errors
+        assert "OUTPUT_SUMMARY" not in results
+
+    def test_snap_without_a_line_still_writes_the_requested_points(self):
+        trace = self.add_layer(_point_layer([(139.70, 35.60, {}), (139.71, 35.61, {})]))
+        self.responses = [_snap_response(with_line=False)]
+        results, ok = self.run_algorithm(
+            SnapToRoadsAlgorithm,
+            {"INPUT": trace.id(), "OUTPUT": "memory:", "OUTPUT_POINTS": "memory:"},
+        )
+        assert ok, self.feedback.errors
+        assert self.output(results).featureCount() == 0
+        assert self.output(results, "OUTPUT_POINTS").featureCount() == 2
+        assert any("no snapped line" in text for text in self.feedback.warnings)
+
+    def test_a_chosen_output_name_is_kept(self):
+        chosen = QgsProcessingOutputLayerDefinition("memory:", self.project)
+        chosen.destinationName = "Commute legs"
+        results, ok = self.run_routes({"OUTPUT": chosen})
+        assert ok, self.feedback.errors
+        details = self.context.layerToLoadOnCompletionDetails(results["OUTPUT"])
+        assert details.name == "Commute legs"
+
+    def test_a_default_output_name_becomes_the_layer_name(self):
+        results, ok = self.run_routes(
+            {"OUTPUT": QgsProcessingOutputLayerDefinition("memory:", self.project)}
+        )
+        assert ok, self.feedback.errors
+        details = self.context.layerToLoadOnCompletionDetails(results["OUTPUT"])
+        assert details.name == routes_layers.LAYER_ROUTES
+
+
+class TestLayerPostProcessors(ProcessingTestCase):
+    """Checks that pending outputs keep their styles until QGIS loads them."""
+
+    def create_output(self):
+        self.responses = [
+            {
+                "ResultItems": [
+                    {"Title": "Cafe", "PlaceId": "p1", "Position": [139.7, 35.6]}
+                ]
+            }
+        ]
+        results, ok = self.run_algorithm(
+            SearchTextAlgorithm,
+            {
+                "QUERY": "cafe",
+                "BIAS_POSITION": TOKYO,
+                "OUTPUT": QgsProcessingOutputLayerDefinition("memory:", self.project),
+            },
+        )
+        assert ok, self.feedback.errors
+        return results
+
+    def test_styles_all_outputs_when_more_than_100_are_pending(self):
+        outputs = [self.create_output() for _ in range(101)]
+        gc.collect()
+
+        for results in outputs:
+            layer = self.output(results)
+            details = self.context.layerToLoadOnCompletionDetails(results["OUTPUT"])
+            details.postProcessor().postProcessLayer(layer, self.context, self.feedback)
+            assert layer.labelsEnabled()
+            assert layer.customProperty(PlacesFunctions.PROPERTY_SOURCE_OPERATION) == (
+                "SearchText"
+            )
+
+    def test_releases_post_processor_when_cancelled_outputs_are_discarded(self):
+        results = self.create_output()
+        processor = weakref.ref(
+            self.context.layerToLoadOnCompletionDetails(
+                results["OUTPUT"]
+            ).postProcessor()
+        )
+
+        self.feedback.cancel()
+        self.context.setLayersToLoadOnCompletion({})
+        gc.collect()
+
+        assert processor() is None
+
+    def test_keeps_post_processor_when_results_move_to_another_context(self):
+        results = self.create_output()
+        processor = weakref.ref(
+            self.context.layerToLoadOnCompletionDetails(
+                results["OUTPUT"]
+            ).postProcessor()
+        )
+        original_context = self.context
+        self.context = QgsProcessingContext()
+        self.context.setProject(self.project)
+        self.context.takeResultsFrom(original_context)
+        del original_context
+        gc.collect()
+
+        layer = self.output(results)
+        assert processor() is not None
+        self.context.layerToLoadOnCompletionDetails(
+            results["OUTPUT"]
+        ).postProcessor().postProcessLayer(layer, self.context, self.feedback)
+        assert layer.labelsEnabled()
+        assert layer.customProperty(PlacesFunctions.PROPERTY_SOURCE_OPERATION) == (
+            "SearchText"
+        )
+
+        self.context = None
+        gc.collect()
+        assert processor() is None
 
 
 class TestAlgorithmRun(ProcessingTestCase):

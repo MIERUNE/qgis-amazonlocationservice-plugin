@@ -31,28 +31,25 @@ class LocationService:
         "terms": "Open the AWS Service Terms page.",
     }
 
-    def __init__(self, iface: QgisInterface) -> None:
-        """Initializes the toolbar and plugin dialogs."""
+    def __init__(self, iface: Optional[QgisInterface]) -> None:
+        """
+        Stores the interface and prepares empty plugin state.
+
+        qgis_process passes ``iface=None`` and only calls ``initProcessing``,
+        so nothing here may touch the QGIS window. The toolbar and dialogs
+        are created in ``initGui``.
+        """
         self.iface = iface
-        self.main_window = self.iface.mainWindow()
         self.plugin_directory = os.path.dirname(__file__)
         self.actions = []
-        self.toolbar = self.iface.addToolBar(self.MAIN_NAME)
-        self.toolbar.setObjectName(self.MAIN_NAME)
         self.provider: Optional[LocationServiceProvider] = None
-        self.config = ConfigUi(self.main_window)
-        self.maps = MapsUi(self.main_window)
-        self.places = PlacesUi(self.main_window)
-        self.routes = RoutesUi(self.main_window)
+        self.main_window = None
+        self.toolbar = None
+        self.config = None
+        self.maps = None
+        self.places = None
+        self.routes = None
         self.terms = TermsUi()
-        self.config.settings_saved.connect(self._refresh_region_capabilities)
-        # Point-picking dialogs stay above their parent QGIS window while the
-        # map canvas remains interactive. Unlike WindowStaysOnTopHint, Tool
-        # windows do not need to stay above unrelated applications.
-        self.places.setWindowFlag(_TOOL_WINDOW, True)
-        self.routes.setWindowFlag(_TOOL_WINDOW, True)
-        for component in [self.config, self.maps, self.places, self.routes]:
-            component.hide()
 
     def add_action(
         self,
@@ -93,8 +90,23 @@ class LocationService:
             self.provider = provider
 
     def initGui(self) -> None:
-        """Adds plugin actions to the QGIS menu and toolbar."""
+        """Creates the toolbar and dialogs and adds the plugin actions."""
         self.initProcessing()
+        self.main_window = self.iface.mainWindow()
+        self.toolbar = self.iface.addToolBar(self.MAIN_NAME)
+        self.toolbar.setObjectName(self.MAIN_NAME)
+        self.config = ConfigUi(self.main_window)
+        self.maps = MapsUi(self.main_window)
+        self.places = PlacesUi(self.main_window)
+        self.routes = RoutesUi(self.main_window)
+        self.config.settings_saved.connect(self._refresh_region_capabilities)
+        # Point-picking dialogs stay above their parent QGIS window while the
+        # map canvas remains interactive. Unlike WindowStaysOnTopHint, Tool
+        # windows do not need to stay above unrelated applications.
+        self.places.setWindowFlag(_TOOL_WINDOW, True)
+        self.routes.setWindowFlag(_TOOL_WINDOW, True)
+        for component in [self.config, self.maps, self.places, self.routes]:
+            component.hide()
         for component_name, help_text in self.COMPONENT_HELP.items():
             icon_path = os.path.join(
                 self.plugin_directory, f"ui/{component_name}/{component_name}.png"
@@ -110,21 +122,24 @@ class LocationService:
             action.setToolTip(f"{component_name.capitalize()} — {help_text}")
 
     def unload(self) -> None:
-        """Removes plugin actions and destroys its dialogs and toolbar."""
+        """Removes the plugin actions, dialogs, toolbar and Processing provider."""
         for action in self.actions:
             self.iface.removePluginMenu(self.MAIN_NAME, action)
             self.toolbar.removeAction(action)
             action.deleteLater()
         self.actions.clear()
         for dialog in (self.config, self.maps, self.places, self.routes):
-            dialog.close()
-            dialog.deleteLater()
+            if dialog is not None:
+                dialog.close()
+                dialog.deleteLater()
+        self.config = self.maps = self.places = self.routes = None
         if self.provider is not None:
             QgsApplication.processingRegistry().removeProvider(self.provider)
             self.provider = None
-        self.main_window.removeToolBar(self.toolbar)
-        self.toolbar.deleteLater()
-        del self.toolbar
+        if self.toolbar is not None:
+            self.main_window.removeToolBar(self.toolbar)
+            self.toolbar.deleteLater()
+            self.toolbar = None
 
     @staticmethod
     def _present(dialog) -> None:

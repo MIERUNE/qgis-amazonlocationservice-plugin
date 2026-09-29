@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from datetime import timedelta, timezone
 from typing import Any
 
 from qgis.core import (
@@ -13,6 +14,7 @@ from qgis.core import (
     QgsProcessingFeedback,
     QgsProject,
 )
+from qgis.PyQt.QtCore import QDate, QDateTime, QTime
 
 WGS84_CRS = "EPSG:4326"
 
@@ -35,12 +37,22 @@ def source_point_rows(
 
     Multipoint features are expanded per part, and the scan stops as soon
     as ``max_rows`` is exceeded instead of reading a large layer to the end.
-    Rows are ordered by the order field value (numbers before other values,
-    NULL last), then by feature id, then by the part index. A missing or
+    Rows are ordered by the order field value (numbers, dates and times
+    before text, NULL last), then by feature id, then by the part index. A missing or
     NULL id falls back to the feature id as a string.
     """
     if source is None:
         raise ValueError(f"{name}: select a point layer first.")
+    fields = source.fields()
+    for field_name in (
+        id_field,
+        order_field,
+        timestamp_field,
+        heading_field,
+        speed_field,
+    ):
+        if field_name and fields.lookupField(field_name) < 0:
+            raise ValueError(f"{name}: the layer has no field {field_name!r}.")
     transform = _wgs84_transform(source, name, transform_context)
     rows = []
     for feature in source.getFeatures():
@@ -145,14 +157,24 @@ def field_timestamp(feature, field_name: str):
     value = field_value(feature, field_name)
     if value is None:
         return None
-    if hasattr(value, "toPyDateTime"):
-        # QDateTime values are local time; attach the system UTC offset.
-        return value.toPyDateTime().astimezone().isoformat(timespec="seconds")
+    if isinstance(value, QDateTime):
+        return iso_time_with_offset(value)
     return str(value).strip() or None
 
 
+def iso_time_with_offset(value: QDateTime) -> str:
+    """
+    Returns a QDateTime as ISO 8601 with its own UTC offset.
+
+    Local times get the system offset for that date. UTC and fixed-offset
+    values (a GPX time, text with an offset) keep their own offset.
+    """
+    offset = timezone(timedelta(seconds=value.offsetFromUtc()))
+    return value.toPyDateTime().replace(tzinfo=offset).isoformat(timespec="seconds")
+
+
 def order_sort_key(order) -> tuple:
-    """Returns a type-safe sort key: numbers, then text, then NULL."""
+    """Returns a sort key: numbers, dates and times first, then text, then NULL."""
     if order is None:
         return (2, 0.0, "")
     if isinstance(order, bool):
@@ -162,4 +184,13 @@ def order_sort_key(order) -> tuple:
         if math.isfinite(order):
             return (0, float(order), "")
         return (2, 0.0, "")
+    if isinstance(order, (QDateTime, QDate, QTime)):
+        # Sort dates and times chronologically, not by their text.
+        if not order.isValid():
+            return (2, 0.0, "")
+        if isinstance(order, QDateTime):
+            return (0, float(order.toMSecsSinceEpoch()), "")
+        if isinstance(order, QDate):
+            return (0, float(order.toJulianDay()), "")
+        return (0, float(order.msecsSinceStartOfDay()), "")
     return (1, 0.0, str(order))

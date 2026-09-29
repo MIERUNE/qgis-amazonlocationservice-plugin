@@ -6,7 +6,6 @@ from typing import Optional
 from urllib.parse import urlparse
 
 from qgis.core import (
-    NULL,
     Qgis,
     QgsCsException,
     QgsField,
@@ -55,7 +54,15 @@ from ...functions.routes_requests import (
     build_snap_body,
     haversine_meters,
 )
-from ...processing_provider.inputs import field_text, is_null
+from ...processing_provider.inputs import (
+    field_number,
+    field_text,
+    field_timestamp,
+    field_value,
+    is_null,
+    iso_time_with_offset,
+    order_sort_key,
+)
 from ...processing_provider.routes_algorithms import (
     TRANSIT_MODE_CHOICES,
     CalculateIsolinesAlgorithm,
@@ -562,13 +569,7 @@ class RoutesUi(QDialog):
         """Returns the depart/arrival choice as RouteOptions keyword values."""
         if self.time_departnow_radioButton.isChecked():
             return {"depart_now": True}
-        # The editor value is local time; send it with the system UTC offset.
-        iso_time = (
-            self.time_dateTimeEdit.dateTime()
-            .toPyDateTime()
-            .astimezone()
-            .isoformat(timespec="seconds")
-        )
+        iso_time = iso_time_with_offset(self.time_dateTimeEdit.dateTime())
         if self.time_departure_radioButton.isChecked():
             return {"departure_time": iso_time}
         if self.time_arrival_radioButton.isChecked():
@@ -779,8 +780,8 @@ class RoutesUi(QDialog):
 
         Multipoint features are expanded per part, and the scan stops as soon
         as ``max_rows`` is exceeded instead of reading a large layer to the
-        end. Rows are ordered by the order field value (numbers before other
-        values, NULL last), then by feature id, then by the part index. A
+        end. Rows are ordered by the order field value (numbers, dates and
+        times before text, NULL last), then by feature id, then by the part index. A
         missing or NULL id falls back to the feature id as a string.
         """
         if (
@@ -810,8 +811,8 @@ class RoutesUi(QDialog):
                         "usable points."
                     )
                 wgs84 = _transform_point_to_wgs84(transform, point, name)
-                identifier = _field_text(feature, id_field)
-                order = _field_value(feature, order_field)
+                identifier = field_text(feature, id_field)
+                order = field_value(feature, order_field)
                 if isinstance(order, float) and not math.isfinite(order):
                     order = None
                 rows.append(
@@ -821,14 +822,14 @@ class RoutesUi(QDialog):
                         "feature_id": feature.id(),
                         "part": part_index,
                         "position": [wgs84.x(), wgs84.y()],
-                        "timestamp": _field_timestamp(feature, timestamp_field),
-                        "heading": _field_number(feature, heading_field),
-                        "speed": _field_number(feature, speed_field),
+                        "timestamp": field_timestamp(feature, timestamp_field),
+                        "heading": field_number(feature, heading_field),
+                        "speed": field_number(feature, speed_field),
                     }
                 )
         rows.sort(
             key=lambda row: (
-                _order_sort_key(row["order"]),
+                order_sort_key(row["order"]),
                 row["feature_id"],
                 row["part"],
             )
@@ -1366,60 +1367,3 @@ def _transform_point_to_wgs84(transform, point, name: str) -> QgsPointXY:
         raise ValueError(
             f"{name}: a point could not be transformed to WGS 84."
         ) from error
-
-
-def _is_null(value) -> bool:
-    """Returns whether a feature attribute is NULL."""
-    return value is None or value == NULL
-
-
-def _field_value(feature, field_name: str):
-    """Returns a raw attribute value, or ``None`` for NULL or no field."""
-    if not field_name:
-        return None
-    value = feature[field_name]
-    return None if _is_null(value) else value
-
-
-def _field_text(feature, field_name: str) -> str:
-    """Returns an attribute as text, or an empty string."""
-    value = _field_value(feature, field_name)
-    return "" if value is None else str(value)
-
-
-def _field_number(feature, field_name: str):
-    """Returns an attribute as a float, or ``None``."""
-    value = _field_value(feature, field_name)
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        raise ValueError(
-            f"Field {field_name!r} must contain numbers (got {value!r})."
-        ) from None
-
-
-def _field_timestamp(feature, field_name: str):
-    """Returns an attribute as an offset-aware ISO time string, or ``None``."""
-    value = _field_value(feature, field_name)
-    if value is None:
-        return None
-    if hasattr(value, "toPyDateTime"):
-        # QDateTime values are local time; attach the system UTC offset.
-        return value.toPyDateTime().astimezone().isoformat(timespec="seconds")
-    return str(value).strip() or None
-
-
-def _order_sort_key(order) -> tuple:
-    """Returns a type-safe sort key: numbers, then text, then NULL."""
-    if order is None:
-        return (2, 0.0, "")
-    if isinstance(order, bool):
-        return (1, 0.0, str(order))
-    if isinstance(order, (int, float)):
-        # NaN breaks sorting, so non-finite values sort with NULL, last.
-        if math.isfinite(order):
-            return (0, float(order), "")
-        return (2, 0.0, "")
-    return (1, 0.0, str(order))

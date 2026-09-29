@@ -19,7 +19,7 @@ from qgis.core import (
     QgsVectorLayer,
 )
 from qgis.PyQt import sip
-from qgis.PyQt.QtCore import Qt, QVariant
+from qgis.PyQt.QtCore import QDate, QDateTime, Qt, QTime, QVariant
 from qgis.PyQt.QtGui import QColor
 
 from .routes_results import (
@@ -494,6 +494,15 @@ SNAP_POINT_FIELDS = [
 ]
 
 
+def _order_text(order) -> str | None:
+    """Returns an order value as text; dates and times as ISO 8601."""
+    if order is None:
+        return None
+    if isinstance(order, (QDateTime, QDate, QTime)):
+        return order.toString(Qt.DateFormat.ISODate)
+    return str(order)
+
+
 def build_snap_points_layer(
     snapped_points: list[dict[str, Any]],
     sent_points: list[dict[str, Any]],
@@ -516,7 +525,7 @@ def build_snap_points_layer(
         feature.setAttributes(
             [
                 str(sent.get("id", "")),
-                None if sent.get("order") is None else str(sent.get("order")),
+                _order_text(sent.get("order")),
                 point["index"],
                 point["confidence"],
                 sent.get("timestamp"),

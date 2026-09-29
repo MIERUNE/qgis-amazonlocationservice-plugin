@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from collections import deque
 from collections.abc import Callable
 from typing import Any
 
@@ -15,6 +14,7 @@ from qgis.core import (
     QgsProcessingOutputString,
     QgsVectorLayer,
 )
+from qgis.PyQt import sip
 from qgis.PyQt.QtGui import QIcon
 
 from ..utils.configuration_handler import (
@@ -28,10 +28,6 @@ from ..utils.redaction import redact_secrets
 WGS84 = QgsCoordinateReferenceSystem("EPSG:4326")
 CONFIG_MISSING_HINT = "Open the Config menu and set your AWS region and API key first."
 _PLUGIN_DIRECTORY = os.path.dirname(os.path.dirname(__file__))
-
-# QGIS does not take ownership of layer post-processors, so keep the most
-# recent ones alive until QGIS has loaded the output layers.
-_POST_PROCESSORS: deque = deque(maxlen=100)
 
 
 class OperationCancelledError(RuntimeError):
@@ -121,7 +117,7 @@ class LocationServiceAlgorithm(QgsProcessingAlgorithm):
     def __init__(self) -> None:
         super().__init__()
         self._credentials: tuple[str, str] | None = None
-        self._outputs: dict[str, tuple[str, LayerStyle]] = {}
+        self._outputs: dict[str, tuple[str, str, LayerStyle]] = {}
         # The original exception of a failed run and the pricing bucket of
         # the last response, kept for callers that run this instance directly.
         self.last_error: Exception | None = None
@@ -238,14 +234,19 @@ class LocationServiceAlgorithm(QgsProcessingAlgorithm):
         self, context: QgsProcessingContext, feedback: QgsProcessingFeedback
     ) -> dict[str, Any]:
         """Names and styles the output layers QGIS loads into the project."""
-        for dest_id, (layer_name, style) in self._outputs.items():
+        for dest_id, (parameter, layer_name, style) in self._outputs.items():
             if not context.willLoadLayerOnCompletion(dest_id):
                 continue
             details = context.layerToLoadOnCompletionDetails(dest_id)
-            details.name = layer_name
+            # Keep a name chosen in a model or a batch row. QGIS uses the
+            # parameter description when nothing was chosen.
+            description = self.parameterDefinition(parameter).description()
+            if details.name in ("", description):
+                details.name = layer_name
             processor = _LayerPostProcessor(style)
-            _POST_PROCESSORS.append(processor)
             details.setPostProcessor(processor)
+            # Keep the Python override alive until QGIS deletes the processor.
+            sip.transferto(processor, processor)
         return {}
 
     @staticmethod
@@ -311,5 +312,5 @@ class LocationServiceAlgorithm(QgsProcessingAlgorithm):
         features = list(layer.getFeatures())
         if features and not sink.addFeatures(features):
             raise QgsProcessingException(f"Could not write the {layer.name()} output.")
-        self._outputs[dest_id] = (layer.name(), LayerStyle(layer))
+        self._outputs[dest_id] = (name, layer.name(), LayerStyle(layer))
         return dest_id

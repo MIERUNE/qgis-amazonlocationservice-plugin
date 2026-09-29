@@ -26,7 +26,7 @@ if HAS_QGIS:
         SnapOptions,
         TracePoint,
     )
-    from location_service.processing_provider import routes_algorithms
+    from location_service.processing_provider import inputs, routes_algorithms
     from location_service.ui.routes import constants
     from location_service.ui.routes import routes as routes_module
     from location_service.ui.routes.routes import RoutesUi
@@ -1443,26 +1443,44 @@ class TestRoutesUiRegressions(unittest.TestCase):
 
 @unittest.skipUnless(HAS_QGIS, "QGIS runtime is required")
 class TestOrderSortKey(unittest.TestCase):
-    """A layer order field can mix numbers, text and NULL without a TypeError."""
+    """The order key the dialog and the algorithms share."""
 
     def test_numbers_sort_before_text_and_null_sorts_last(self):
         values = [None, "b", 2, "a", 1, True]
 
-        ordered = sorted(values, key=routes_module._order_sort_key)
+        ordered = sorted(values, key=inputs.order_sort_key)
 
         assert ordered == [1, 2, True, "a", "b", None]
 
     def test_a_boolean_sorts_as_text_instead_of_as_a_number(self):
-        group = routes_module._order_sort_key(True)[0]
+        group = inputs.order_sort_key(True)[0]
 
-        assert group == routes_module._order_sort_key("x")[0]
-        assert group != routes_module._order_sort_key(1)[0]
+        assert group == inputs.order_sort_key("x")[0]
+        assert group != inputs.order_sort_key(1)[0]
 
     def test_a_nan_order_sorts_in_the_null_group(self):
-        nan_key = routes_module._order_sort_key(float("nan"))
+        nan_key = inputs.order_sort_key(float("nan"))
 
-        assert nan_key == routes_module._order_sort_key(None)
-        assert nan_key[0] != routes_module._order_sort_key(1)[0]
+        assert nan_key == inputs.order_sort_key(None)
+        assert nan_key[0] != inputs.order_sort_key(1)[0]
+
+    def test_dates_and_times_sort_chronologically(self):
+        key = inputs.order_sort_key
+        earlier = QDateTime(QDate(2026, 9, 29), QTime(9, 5))
+        later = QDateTime(QDate(2026, 9, 29), QTime(10, 0))
+
+        # As text, "10:00" would sort before "9:05".
+        assert key(earlier) < key(later)
+        assert key(QDate(2026, 1, 1)) < key(QDate(2026, 1, 2))
+        assert key(QTime(9, 5)) < key(QTime(10, 0))
+        assert key(QDateTime()) == key(None)
+
+    def test_a_datetime_timestamp_keeps_its_instant(self):
+        value = QDateTime.fromString("2026-01-01T00:00:00Z", Qt.DateFormat.ISODate)
+        feature = Mock()
+        feature.__getitem__ = Mock(return_value=value)
+
+        assert inputs.field_timestamp(feature, "t") == "2026-01-01T00:00:00+00:00"
 
 
 @unittest.skipUnless(HAS_QGIS, "QGIS runtime is required")

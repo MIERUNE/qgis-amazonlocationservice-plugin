@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from datetime import timedelta, timezone
 from typing import Any
 
 from qgis.core import (
@@ -52,7 +51,7 @@ from ..functions.routes_requests import (
 )
 from . import compat
 from .base import WGS84, LocationServiceAlgorithm
-from .inputs import source_point_rows
+from .inputs import iso_time_with_offset, source_point_rows
 
 ROUTES_PERMISSION_HINT = (
     "The request was rejected (HTTP 403). Check that the API key allows the "
@@ -308,7 +307,7 @@ class CalculateRoutesAlgorithm(RoutesAlgorithm):
         self.addParameter(
             QgsProcessingParameterDateTime(
                 self.TIME,
-                "Departure or arrival time (local time)",
+                "Departure or arrival time",
                 type=compat.DATETIME,
                 optional=True,
             )
@@ -355,11 +354,16 @@ class CalculateRoutesAlgorithm(RoutesAlgorithm):
         self.addOutput(QgsProcessingOutputString(self.NOTICES, "Notices (JSON)"))
         self.add_pricing_output()
 
-    def _time_options(self, parameters, context) -> dict[str, Any]:
+    def _time_options(self, parameters, context, feedback) -> dict[str, Any]:
         """Returns the depart/arrival choice as RouteOptions keyword values."""
         choice = TIME_CHOICES[
             self.parameterAsEnum(parameters, self.TIME_CHOICE, context)
         ][1]
+        time_given = parameters.get(self.TIME) not in (None, "")
+        if time_given and choice in ("", "depart_now"):
+            feedback.pushWarning(
+                "The time was ignored because no departure or arrival time was chosen."
+            )
         if not choice:
             return {}
         if choice == "depart_now":
@@ -369,14 +373,17 @@ class CalculateRoutesAlgorithm(RoutesAlgorithm):
             raise ValueError("Set the departure or arrival time.")
         return {choice: iso_time_with_offset(value)}
 
-    def _transit_options(self, parameters, context, travel_mode: str) -> dict:
+    def _transit_options(self, parameters, context, travel_mode: str, feedback) -> dict:
         """Returns the allowed/excluded transit modes for RouteOptions."""
-        if travel_mode != "Transit":
-            return {}
         transit_filter = TRANSIT_FILTERS[
             self.parameterAsEnum(parameters, self.TRANSIT_FILTER, context)
         ][1]
         if not transit_filter:
+            return {}
+        if travel_mode != "Transit":
+            feedback.pushWarning(
+                "The transit mode filter applies to Transit only and was ignored."
+            )
             return {}
         modes = tuple(
             TRANSIT_MODE_CHOICES[index]
@@ -409,13 +416,23 @@ class CalculateRoutesAlgorithm(RoutesAlgorithm):
         """Sends CalculateRoutes and writes the leg and summary layers."""
         travel_mode = self.travel_mode(parameters, context)
         transit_like = travel_mode in TRANSIT_LIKE_MODES
-        waypoints = self._waypoints(parameters, context, feedback)
-        if transit_like and waypoints:
+        # Transit and Intermodal ignore waypoints, so the layer is not read.
+        waypoints = ()
+        if not transit_like:
+            waypoints = self._waypoints(parameters, context, feedback)
+        elif parameters.get(self.WAYPOINTS) not in (None, ""):
             feedback.pushWarning(
                 "Waypoints do not apply to Transit or Intermodal routing and "
                 "were ignored."
             )
-            waypoints = ()
+        optimize_for = OPTIMIZE_FOR[
+            self.parameterAsEnum(parameters, self.OPTIMIZE_FOR, context)
+        ]
+        if transit_like and optimize_for != OPTIMIZE_FOR[0]:
+            feedback.pushWarning(
+                "Optimize for does not apply to Transit or Intermodal routing "
+                "and was ignored."
+            )
         avoid = tuple(
             AVOID_KEYS[index]
             for index in self.parameterAsEnums(parameters, self.AVOID, context)
@@ -431,15 +448,13 @@ class CalculateRoutesAlgorithm(RoutesAlgorithm):
             destination=self.position(parameters, self.DESTINATION, context),
             waypoints=waypoints,
             travel_mode=travel_mode,
-            optimize_for=OPTIMIZE_FOR[
-                self.parameterAsEnum(parameters, self.OPTIMIZE_FOR, context)
-            ],
+            optimize_for=optimize_for,
             avoid=avoid,
             max_alternatives=self.parameterAsInt(
                 parameters, self.MAX_ALTERNATIVES, context
             ),
-            **self._time_options(parameters, context),
-            **self._transit_options(parameters, context, travel_mode),
+            **self._time_options(parameters, context, feedback),
+            **self._transit_options(parameters, context, travel_mode, feedback),
         )
         routes_capabilities.validate_region_options(
             self.region,
@@ -484,6 +499,14 @@ class CalculateRoutesAlgorithm(RoutesAlgorithm):
         summary = None
         if parameters.get(self.OUTPUT_SUMMARY) is not None:
             summary = routes_layers.build_route_summary_layer(result)
+            if summary is None:
+                # A requested output is written even when it is empty, so a
+                # model step that reads it does not fail.
+                summary = routes_layers.empty_layer(
+                    "None",
+                    routes_layers.LAYER_ROUTE_SUMMARY,
+                    routes_layers.ROUTE_SUMMARY_FIELDS,
+                )
         feedback.pushInfo(routes_success_message(result))
         results = self.publish(
             parameters,
@@ -606,7 +629,8 @@ class SnapToRoadsAlgorithm(RoutesAlgorithm):
     OPERATION = "SnapToRoads"
     HELP = (
         "Snaps a GPS trace from a point or multipoint layer to roads. Points "
-        "are sent in the order of the order field (numbers first, NULL last), "
+        "are sent in the order of the order field (numbers, dates and times "
+        "first, NULL last), "
         "then by feature id.\n\n"
         "Timestamps must be date-time fields or ISO 8601 text with a timezone "
         "offset, such as 2026-08-26T09:00:00+09:00. Heading is 0 to 360 "
@@ -728,18 +752,19 @@ class SnapToRoadsAlgorithm(RoutesAlgorithm):
         )
         line_points = routes_results.snapped_line_points(result)
         if line_points is None:
-            # Confidence points are never published without the primary line.
-            feedback.pushWarning("SnapToRoads returned no drawable results.")
+            feedback.pushWarning("SnapToRoads returned no snapped line.")
             line = routes_layers.empty_layer(
                 "LineString",
                 routes_layers.LAYER_SNAP_LINE,
                 routes_layers.SNAP_LINE_FIELDS,
             )
-            points = None
         else:
             line = routes_layers.build_snap_line_layer(
                 line_points, len(rows), len(notices)
             )
+        points = None
+        if parameters.get(self.OUTPUT_POINTS) is not None:
+            # The points come from the trace, so write them even without a line.
             points = routes_layers.build_snap_points_layer(snapped, rows)
         results = self.publish(
             parameters,
@@ -903,17 +928,6 @@ class CalculateRouteMatrixAlgorithm(RoutesAlgorithm):
             context,
             [(self.OUTPUT, table, False), (self.OUTPUT_LINES, lines, True)],
         )
-
-
-def iso_time_with_offset(value) -> str:
-    """
-    Returns a QDateTime as ISO 8601 with its own UTC offset.
-
-    A local time gets the system offset in effect at that time, and a time
-    parsed from text with an offset keeps that offset.
-    """
-    offset = timezone(timedelta(seconds=value.offsetFromUtc()))
-    return value.toPyDateTime().replace(tzinfo=offset).isoformat(timespec="seconds")
 
 
 def routes_success_message(result: dict[str, Any]) -> str:
