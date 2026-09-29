@@ -12,6 +12,7 @@ dependencies = []
 
 [dependency-groups]
 dev = [
+    "bandit[toml]~=1.9",
     "pyqt5-stubs>=5.15.6.0",
     "PyQt6-stubs>=6.4.0.0",
     "ruff>=0.14.0",
@@ -24,6 +25,9 @@ test = [
 
 [tool.pytest.ini_options]
 testpaths = ["location_service/tests"]
+
+[tool.bandit]
+exclude_dirs = ["location_service/tests"]
 
 [tool.ruff]
 target-version = "py310"
