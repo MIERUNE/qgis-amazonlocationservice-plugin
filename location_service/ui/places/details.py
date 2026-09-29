@@ -133,8 +133,9 @@ def fetch_detail_values(
         )
     except Exception as error:
         # Report what changed, such as a PlaceId or a detail field type.
-        if watcher.error is not None:
-            raise watcher.error from error
+        change = watcher.error
+        if change is not None:
+            raise change from error
         if run.feedback.isCanceled():
             raise PlacesOperationCancelledError(
                 "The GetPlace request was cancelled."
@@ -142,8 +143,9 @@ def fetch_detail_values(
         raise
     finally:
         watcher.disconnect()
-    if watcher.error is not None:
-        raise watcher.error
+    change = watcher.error
+    if change is not None:
+        raise change
     output = run.take_layer(results, "OUTPUT")
     if output is None:
         raise RuntimeError("The GetPlace algorithm returned no layer.")
