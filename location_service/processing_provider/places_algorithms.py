@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 from qgis.core import (
@@ -599,10 +600,12 @@ class GetPlaceAlgorithm(PlacesAlgorithm):
             raise QgsProcessingException(
                 self.invalidSourceError(parameters, self.INPUT)
             )
+        self.raise_if_cancelled(feedback)
+        source_fields = source.fields()
         place_id_field = self.parameterAsString(
             parameters, self.PLACE_ID_FIELD, context
         )
-        if source.fields().indexOf(place_id_field) < 0:
+        if source_fields.indexOf(place_id_field) < 0:
             raise ValueError("Select the field that contains the PlaceId values.")
         language, political_view = self.localization(parameters, context)
         features = list(PlacesFunctions.ENRICH_FEATURES)
@@ -613,14 +616,16 @@ class GetPlaceAlgorithm(PlacesAlgorithm):
             intended_use=INTENDED_USE,
         )
 
-        # Check the output schema before any billed request is sent.
-        fields = self._detail_fields(source.fields())
-        input_features = list(source.getFeatures())
-        place_ids = self._unique_place_ids(input_features, place_id_field)
+        # Validate the input before sending any billed requests.
+        fields = self._detail_fields(source_fields)
+        place_ids = self._unique_place_ids(
+            source.getFeatures(), place_id_field, feedback
+        )
         details = self._fetch_details(
             place_ids, language, political_view, features, feedback
         )
 
+        self.raise_if_cancelled(feedback)
         sink, dest_id = self.parameterAsSink(
             parameters,
             self.OUTPUT,
@@ -631,39 +636,50 @@ class GetPlaceAlgorithm(PlacesAlgorithm):
         )
         if sink is None:
             raise QgsProcessingException(self.invalidSinkError(parameters, self.OUTPUT))
-        output = []
-        for feature in input_features:
+        count = 0
+        for feature in source.getFeatures():
+            self.raise_if_cancelled(feedback)
             copy = QgsFeature(fields)
             copy.setGeometry(feature.geometry())
-            for field in source.fields():
+            for field in source_fields:
                 copy.setAttribute(field.name(), feature[field.name()])
             for name, value in details[field_text(feature, place_id_field)].items():
                 copy.setAttribute(name, value)
-            output.append(copy)
-        if output and not sink.addFeatures(output):
-            raise QgsProcessingException("Could not write the GetPlace output.")
+            if not sink.addFeature(copy):
+                raise QgsProcessingException("Could not write the GetPlace output.")
+            count += 1
+        self.raise_if_cancelled(feedback)
         feedback.pushInfo(
-            f"Added details for {len(details)} unique place(s) to "
-            f"{len(output)} feature(s)."
+            f"Added details for {len(details)} unique place(s) to {count} feature(s)."
         )
         return {self.OUTPUT: dest_id}
 
-    @staticmethod
-    def _unique_place_ids(features: list[QgsFeature], place_id_field: str) -> list:
+    def _unique_place_ids(
+        self,
+        features: Iterable[QgsFeature],
+        place_id_field: str,
+        feedback: QgsProcessingFeedback,
+    ) -> list[str]:
         """Returns the unique PlaceIds in input order, within the request cap."""
         place_ids = []
+        seen = set()
         for feature in features:
+            self.raise_if_cancelled(feedback)
             place_id = field_text(feature, place_id_field)
             if not place_id:
                 raise ValueError("One or more features have no PlaceId value.")
-            if place_id not in place_ids:
-                place_ids.append(place_id)
-        if len(place_ids) > PlacesFunctions.MAX_ENRICH_FEATURES:
-            raise ValueError(
-                f"{len(place_ids)} unique places were given. GetPlace sends one "
-                "billable Storage request per unique PlaceId; use at most "
-                f"{PlacesFunctions.MAX_ENRICH_FEATURES} unique places."
-            )
+            if place_id in seen:
+                continue
+            if len(place_ids) == PlacesFunctions.MAX_ENRICH_FEATURES:
+                raise ValueError(
+                    f"At least {len(place_ids) + 1} unique places were given. "
+                    "GetPlace sends one billable Storage request per unique "
+                    "PlaceId; use at most "
+                    f"{PlacesFunctions.MAX_ENRICH_FEATURES} unique places."
+                )
+            seen.add(place_id)
+            place_ids.append(place_id)
+        self.raise_if_cancelled(feedback)
         return place_ids
 
     def _fetch_details(

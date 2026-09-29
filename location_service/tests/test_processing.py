@@ -77,6 +77,47 @@ if HAS_QGIS:
         def pushInfo(self, info):
             self.infos.append(info)
 
+    class _ObservedSource:
+        """Wraps a layer so tests can observe each input pass."""
+
+        def __init__(self, layer, on_read=None):
+            self.layer = layer
+            self.on_read = on_read
+            self.passes = 0
+
+        def fields(self):
+            return self.layer.fields()
+
+        def wkbType(self):
+            return self.layer.wkbType()
+
+        def sourceCrs(self):
+            return self.layer.crs()
+
+        def getFeatures(self):
+            self.passes += 1
+            for index, feature in enumerate(self.layer.getFeatures()):
+                if self.on_read is not None:
+                    self.on_read(self.passes, index)
+                yield feature
+
+    class _RecordingSink:
+        """Records individual writes and can cancel or reject one."""
+
+        def __init__(self, feedback, cancel_after=None, fail_at=None):
+            self.feedback = feedback
+            self.cancel_after = cancel_after
+            self.fail_at = fail_at
+            self.features = []
+
+        def addFeature(self, feature):
+            if self.fail_at == len(self.features) + 1:
+                return False
+            self.features.append(QgsFeature(feature))
+            if self.cancel_after == len(self.features):
+                self.feedback.cancel()
+            return True
+
 
 CREDENTIALS = ("ap-northeast-1", "v1.public.test")  # pragma: allowlist secret
 GRAB_CREDENTIALS = ("ap-southeast-1", "v1.public.test")  # pragma: allowlist secret
@@ -208,6 +249,25 @@ class TestProvider(ProcessingTestCase):
 
 class TestPlacesAlgorithms(ProcessingTestCase):
     """Covers the Places algorithms end to end without the network."""
+
+    def run_observed_get_place(self, layer, source, sink):
+        """Runs GetPlace with a source and sink whose activity tests can inspect."""
+        algorithm = GetPlaceAlgorithm().create()
+        with (
+            self.fake_service(),
+            patch.object(GetPlaceAlgorithm, "parameterAsSource", return_value=source),
+            patch.object(
+                GetPlaceAlgorithm,
+                "parameterAsSink",
+                return_value=(sink, "observed-output"),
+            ),
+        ):
+            _results, ok = algorithm.run(
+                {"INPUT": layer.id(), "OUTPUT": "memory:"},
+                self.context,
+                self.feedback,
+            )
+        return ok
 
     def test_search_text_sends_a_storage_request_and_writes_points(self):
         self.responses = [
@@ -399,6 +459,162 @@ class TestPlacesAlgorithms(ProcessingTestCase):
         assert not ok
         assert "no PlaceId" in " ".join(self.feedback.errors)
         assert self.gets == []
+
+    def test_get_place_stops_scanning_at_the_26th_unique_id(self):
+        limit = PlacesFunctions.MAX_ENRICH_FEATURES
+        layer = self.add_layer(
+            _point_layer(
+                [(139.7, 35.6, {"PlaceId": f"p{index}"}) for index in range(limit + 2)],
+                (("PlaceId", QVariant.String),),
+            )
+        )
+        read_indexes = []
+        source = _ObservedSource(
+            layer, lambda _pass_number, index: read_indexes.append(index)
+        )
+        sink = _RecordingSink(self.feedback)
+
+        ok = self.run_observed_get_place(layer, source, sink)
+
+        assert not ok
+        assert f"At least {limit + 1} unique places" in " ".join(self.feedback.errors)
+        assert read_indexes == list(range(limit + 1))
+        assert source.passes == 1
+        assert self.gets == []
+
+    def test_get_place_cancellation_during_id_scan_sends_nothing(self):
+        layer = self.add_layer(
+            _point_layer(
+                [(139.7, 35.6, {"PlaceId": f"p{index}"}) for index in range(4)],
+                (("PlaceId", QVariant.String),),
+            )
+        )
+        read_indexes = []
+
+        def cancel_on_second_feature(_pass_number, index):
+            read_indexes.append(index)
+            if index == 1:
+                self.feedback.cancel()
+
+        source = _ObservedSource(layer, cancel_on_second_feature)
+        sink = _RecordingSink(self.feedback)
+
+        ok = self.run_observed_get_place(layer, source, sink)
+
+        assert not ok
+        assert "The operation was cancelled." in " ".join(self.feedback.errors)
+        assert read_indexes == [0, 1]
+        assert source.passes == 1
+        assert self.gets == []
+
+    def test_get_place_checks_all_ids_before_billing(self):
+        limit = PlacesFunctions.MAX_ENRICH_FEATURES
+        rows = [(139.7, 35.6, {"PlaceId": f"p{index}"}) for index in range(limit)]
+        rows.append((139.7, 35.6, {}))
+        layer = self.add_layer(_point_layer(rows, (("PlaceId", QVariant.String),)))
+
+        _results, ok = self.run_algorithm(
+            GetPlaceAlgorithm, {"INPUT": layer.id(), "OUTPUT": "memory:"}
+        )
+
+        assert not ok
+        assert "no PlaceId" in " ".join(self.feedback.errors)
+        assert self.gets == []
+
+    def test_get_place_writes_many_duplicates_one_at_a_time(self):
+        count = 120
+        layer = self.add_layer(
+            _point_layer(
+                [
+                    (
+                        139.7 + index * 0.0001,
+                        35.6,
+                        {"PlaceId": f"p{index % 3}", "Marker": index, "Phone": "old"},
+                    )
+                    for index in range(count)
+                ],
+                (
+                    ("PlaceId", QVariant.String),
+                    ("Marker", QVariant.Int),
+                    ("Phone", QVariant.String),
+                ),
+            )
+        )
+        sink = _RecordingSink(self.feedback)
+        writes_before_each_read = []
+
+        def record_output_read(pass_number, _index):
+            if pass_number == 2:
+                writes_before_each_read.append(len(sink.features))
+
+        source = _ObservedSource(layer, record_output_read)
+        self.responses = [
+            {"Contacts": {"Phones": [{"Value": f"03-000{index}"}]}}
+            for index in range(3)
+        ]
+
+        ok = self.run_observed_get_place(layer, source, sink)
+
+        assert ok, self.feedback.errors
+        assert source.passes == 2
+        assert writes_before_each_read == list(range(count))
+        assert [url.split("/v2/place/")[1].split("?")[0] for url in self.gets] == [
+            "p0",
+            "p1",
+            "p2",
+        ]
+        assert [feature["Marker"] for feature in sink.features] == list(range(count))
+        assert [feature["PlaceId"] for feature in sink.features] == [
+            f"p{index % 3}" for index in range(count)
+        ]
+        assert [feature["Phone"] for feature in sink.features] == [
+            f"03-000{index % 3}" for index in range(count)
+        ]
+        assert all(
+            abs(feature.geometry().asPoint().x() - (139.7 + index * 0.0001)) < 1e-9
+            for index, feature in enumerate(sink.features)
+        )
+
+    def test_get_place_cancellation_stops_output_writes(self):
+        layer = self.add_layer(
+            _point_layer(
+                [(139.7, 35.6, {"PlaceId": "p1"}) for _index in range(3)],
+                (("PlaceId", QVariant.String),),
+            )
+        )
+
+        for cancel_after in (1, 3):
+            with self.subTest(cancel_after=cancel_after):
+                self.feedback = _Feedback()
+                self.gets = []
+                self.responses = [{}]
+                source = _ObservedSource(layer)
+                sink = _RecordingSink(self.feedback, cancel_after=cancel_after)
+
+                ok = self.run_observed_get_place(layer, source, sink)
+
+                assert not ok
+                assert "The operation was cancelled." in " ".join(self.feedback.errors)
+                assert len(sink.features) == cancel_after
+                assert len(self.gets) == 1
+
+    def test_get_place_reports_a_failed_output_write(self):
+        layer = self.add_layer(
+            _point_layer(
+                [(139.7, 35.6, {"PlaceId": "p1"}) for _index in range(3)],
+                (("PlaceId", QVariant.String),),
+            )
+        )
+        self.responses = [{}]
+        source = _ObservedSource(layer)
+        sink = _RecordingSink(self.feedback, fail_at=2)
+
+        ok = self.run_observed_get_place(layer, source, sink)
+
+        assert not ok
+        assert "Could not write the GetPlace output." in " ".join(self.feedback.errors)
+        assert len(sink.features) == 1
+        assert len(self.gets) == 1
 
     def test_cancelled_run_sends_nothing(self):
         self.feedback.cancel()
