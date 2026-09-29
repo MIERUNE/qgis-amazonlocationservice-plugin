@@ -275,3 +275,24 @@ def build_search_nearby_body(
             "NextToken": _validate_next_token(next_token),
         }
     )
+
+
+def parse_country_codes(text: str | None) -> list[str] | None:
+    """
+    Parses comma-separated ISO alpha-2/alpha-3 country codes.
+
+    Returns the upper-cased codes, ``None`` for an empty value, and raises
+    ``ValueError`` for an entry that is not a 2- or 3-letter code.
+    """
+    countries = []
+    for part in str(text or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if not re.fullmatch(r"[A-Za-z]{2,3}", part):
+            raise ValueError(
+                f"Invalid country code: {part}. "
+                "Use ISO alpha-2/alpha-3 codes such as JP or JPN."
+            )
+        countries.append(part.upper())
+    return countries or None

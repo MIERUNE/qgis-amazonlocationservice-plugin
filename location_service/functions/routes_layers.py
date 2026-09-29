@@ -163,6 +163,15 @@ def _memory_layer(geometry: str, name: str) -> QgsVectorLayer:
     return QgsVectorLayer(f"{geometry}?crs={WGS84_CRS}", name, "memory")
 
 
+def empty_layer(
+    geometry: str, name: str, field_defs: list[tuple[str, int]]
+) -> QgsVectorLayer:
+    """Returns an empty unregistered result layer with the given schema."""
+    layer = _memory_layer(geometry, name)
+    _add_fields(layer, field_defs)
+    return layer
+
+
 FIELD_ALIASES = {
     "LegDistance": "LegDistance (m)",
     "LegDuration": "LegDuration (s)",

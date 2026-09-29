@@ -1,7 +1,7 @@
 import unittest
 
+from location_service.functions import places_capabilities as constants
 from location_service.functions.places_storage import normalize_country_code
-from location_service.ui.places import constants
 
 
 class TestPlacesRegionCapabilities(unittest.TestCase):

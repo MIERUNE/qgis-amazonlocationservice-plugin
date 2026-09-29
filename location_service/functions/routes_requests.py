@@ -521,3 +521,36 @@ def build_matrix_body(options: MatrixOptions) -> dict[str, Any]:
             "RoutingBoundary": {"Unbounded": True},
         }
     )
+
+
+def parse_thresholds(text: str, threshold_type: str) -> tuple[int, ...]:
+    """
+    Converts comma-separated minutes or kilometers into API threshold units.
+
+    ``Time`` values are minutes and become seconds; ``Distance`` values are
+    kilometers and become meters. Range limits are checked later by
+    ``build_isolines_body``.
+    """
+    if threshold_type not in THRESHOLD_TYPES:
+        raise ValueError(
+            f"Threshold type must be one of: {', '.join(THRESHOLD_TYPES)}."
+        )
+    factor = 60 if threshold_type == "Time" else 1000
+    values = []
+    for part in str(text or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            number = float(part)
+        except ValueError:
+            raise ValueError(f"Threshold values must be numbers: {part!r}.") from None
+        if not math.isfinite(number):
+            raise ValueError(f"Threshold values must be finite numbers: {part!r}.")
+        value = round(number * factor)
+        if value < 1:
+            raise ValueError(f"Threshold value {part} is too small; it rounds to zero.")
+        values.append(value)
+    if not values:
+        raise ValueError("Enter at least one threshold value (e.g. 5, 10, 15).")
+    return tuple(values)
