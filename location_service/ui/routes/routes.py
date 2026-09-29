@@ -2,7 +2,6 @@ import html
 import json
 import math
 import os
-from typing import Optional
 from urllib.parse import urlparse
 
 from qgis.core import (
@@ -137,7 +136,7 @@ class RoutesUi(QDialog):
 
     UI_PATH = os.path.join(os.path.dirname(__file__), "routes.ui")
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         """Loads the dialog, connects its controls, and populates the options."""
         super().__init__(parent)
         uic.loadUi(self.UI_PATH, self)
@@ -149,7 +148,7 @@ class RoutesUi(QDialog):
         self._iso_map_click = None
         self._waypoint_collector = None
         self._waypoints: list[tuple[float, float]] = []
-        self._active_run: Optional[AlgorithmRun] = None
+        self._active_run: AlgorithmRun | None = None
         self._cancelled = False
         self._busy = False
 

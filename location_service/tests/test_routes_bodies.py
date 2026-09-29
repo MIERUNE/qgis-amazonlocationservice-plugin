@@ -344,8 +344,8 @@ class TestIsoTimeValidation(unittest.TestCase):
 
     The check is written by hand instead of delegating to fromisoformat,
     which accepts a different syntax on every Python version: the plugin
-    must judge a time the same way on the 3.9 of QGIS 3.34 LTR and on the
-    3.12 of QGIS 4.2.
+    must judge a time the same way on every Python version QGIS runs on,
+    from 3.10 up.
     """
 
     def _assert_refused(self, value):

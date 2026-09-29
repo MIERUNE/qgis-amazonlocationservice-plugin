@@ -1,10 +1,10 @@
 [project]
 name = "qgis-amazonlocationservice-plugin"
-version = "4.6.0"
+version = "0.0.0"
 description = "QGIS Plugin for Amazon Location Service"
 readme = "README.md"
-# QGIS 3.34 LTR bundles Python 3.9.
-requires-python = ">=3.9"
+# QGIS 3.44 LTR bundles Python 3.12; Linux distributions ship 3.10 or later.
+requires-python = ">=3.10"
 authors = [
     { name = "MIERUNE Inc.", email = "info@mierune.co.jp" }
 ]
@@ -16,9 +16,17 @@ dev = [
     "PyQt6-stubs>=6.4.0.0",
     "ruff>=0.14.0",
 ]
+# Installed into the QGIS test container from uv.lock.
+test = [
+    "pytest>=8.0",
+    "pytest-qgis>=4.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["location_service/tests"]
 
 [tool.ruff]
-target-version = "py39"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = [
@@ -41,5 +49,8 @@ select = [
 ]
 ignore = [
     "N802",  # QGIS and Qt APIs require camelCase names.
-    "PT027",  # Tests use unittest assertions under the QGIS test runner.
+    "PT027",  # Tests are unittest.TestCase classes collected by pytest.
 ]
+
+[tool.uv]
+exclude-newer = "1 week"
