@@ -602,7 +602,7 @@ def normalize_snapped_trace_points(
             "no layer was created from this response."
         )
     normalized = []
-    for index, (point, sent) in enumerate(zip(points, sent_positions)):
+    for index, (point, sent) in enumerate(zip(points, sent_positions, strict=True)):
         if not isinstance(point, dict):
             raise BrokenResponseError(
                 "The snapped trace points do not match the sent trace points; "

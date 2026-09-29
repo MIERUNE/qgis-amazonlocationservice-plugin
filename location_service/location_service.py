@@ -1,5 +1,6 @@
 import os
-from typing import Callable, ClassVar, Optional
+from collections.abc import Callable
+from typing import ClassVar
 
 from qgis.gui import QgisInterface
 from qgis.PyQt.QtCore import Qt
@@ -59,9 +60,9 @@ class LocationService:
         enabled_flag: bool = True,
         add_to_menu: bool = True,
         add_to_toolbar: bool = True,
-        status_tip: Optional[str] = None,
-        whats_this: Optional[str] = None,
-        parent: Optional[QWidget] = None,
+        status_tip: str | None = None,
+        whats_this: str | None = None,
+        parent: QWidget | None = None,
     ) -> QAction:
         """Creates an action and adds it to the requested QGIS locations."""
         icon = QIcon(icon_path)

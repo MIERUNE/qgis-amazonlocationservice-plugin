@@ -24,8 +24,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Cover qgisMinimumVersion (3.34 LTR) and QGIS 4.
-        docker_tags: ["release-3_34", "4.2"]
+        # Cover qgisMinimumVersion (3.44 LTR) and QGIS 4.
+        docker_tags: ["3.44", "4.2"]
 
     steps:
       - name: Checkout
@@ -38,15 +38,12 @@ jobs:
       - name: Run tests
         timeout-minutes: 10
         run: |
-          # PIP_BREAK_SYSTEM_PACKAGES is ignored by older pip releases,
-          # unlike the --break-system-packages flag.
           docker run --rm \
             -v "${{ github.workspace }}":/plugin \
             -w /plugin \
-            -e PIP_BREAK_SYSTEM_PACKAGES=1 \
             "$DOCKER_IMAGE":${{ matrix.docker_tags }} \
             sh -c "
-              pip3 install pytest pytest-qgis &&
+              pip3 install --break-system-packages pytest pytest-qgis &&
               xvfb-run -s '+extension GLX -screen 0 1024x768x24' \
                 python3 -m pytest -v
             "

@@ -1,6 +1,5 @@
 import os
 import re
-from typing import Optional
 
 from qgis.core import QgsProject
 from qgis.PyQt import sip, uic
@@ -44,7 +43,7 @@ class PlacesUi(QDialog):
 
     UI_PATH = os.path.join(os.path.dirname(__file__), "places.ui")
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         """Loads the dialog, connects its controls, and populates the options."""
         super().__init__(parent)
         uic.loadUi(self.UI_PATH, self)
@@ -56,7 +55,7 @@ class PlacesUi(QDialog):
         self._cancelled = False
         self._busy = False
         self._active_function = None
-        self._limited_region: Optional[bool] = None
+        self._limited_region: bool | None = None
         self._language_was_forced = False
         self._max_results = constants.DEFAULT_MAX_RESULTS.copy()
         self._pagination_request = None
@@ -152,8 +151,8 @@ class PlacesUi(QDialog):
 
     def _save_localization_preferences(
         self,
-        language: Optional[str],
-        political_view: Optional[str],
+        language: str | None,
+        political_view: str | None,
         save_political_view: bool = True,
         save_language: bool = True,
     ) -> None:
@@ -247,7 +246,7 @@ class PlacesUi(QDialog):
         """Returns the currently selected function name."""
         return self.places_comboBox.currentText()
 
-    def _parse_position(self) -> Optional[list]:
+    def _parse_position(self) -> list | None:
         """Returns the picked ``[lon, lat]`` pair, or ``None`` when both are blank."""
         longitude = self.lon_lineEdit.text().strip()
         latitude = self.lat_lineEdit.text().strip()
@@ -260,7 +259,7 @@ class PlacesUi(QDialog):
             )
         return position
 
-    def _language(self) -> Optional[str]:
+    def _language(self) -> str | None:
         """
         Returns the BCP 47 language code, or ``None`` for the API default.
 
@@ -275,7 +274,7 @@ class PlacesUi(QDialog):
             raise ValueError(constants.LANGUAGE_FORMAT_HINT)
         return text
 
-    def _political_view(self) -> Optional[str]:
+    def _political_view(self) -> str | None:
         """Returns the selected political view, or ``None`` for the default."""
         return self.political_view_comboBox.currentData() or None
 
@@ -292,7 +291,7 @@ class PlacesUi(QDialog):
         return text
 
     @staticmethod
-    def _parse_countries(text: str) -> Optional[list]:
+    def _parse_countries(text: str) -> list | None:
         """
         Parses comma-separated ISO alpha-2/alpha-3 country codes.
 
@@ -378,7 +377,7 @@ class PlacesUi(QDialog):
         return bool(drawable_result_items(result))
 
     def _build_request(
-        self, function: str, position: Optional[list], max_results: int
+        self, function: str, position: list | None, max_results: int
     ) -> dict:
         """Captures one complete Places request from the current inputs."""
         language = self._language()
@@ -431,8 +430,8 @@ class PlacesUi(QDialog):
     def _send_request(
         self,
         request: dict,
-        intended_use: Optional[str],
-        next_token: Optional[str] = None,
+        intended_use: str | None,
+        next_token: str | None = None,
     ) -> dict:
         """Validates region capabilities and sends one captured request."""
         function = request["function"]
@@ -508,7 +507,7 @@ class PlacesUi(QDialog):
         raise ValueError(f"Unknown function: {function}")
 
     @staticmethod
-    def _validate_request_options(request: dict, intended_use: Optional[str]) -> None:
+    def _validate_request_options(request: dict, intended_use: str | None) -> None:
         """Validates provider-specific options before a request is sent."""
         constants.validate_region_options(
             request["region"],
@@ -678,7 +677,7 @@ class PlacesUi(QDialog):
                 bool(self._pagination_request and self._next_token)
             )
 
-    def _append_result_page(self, layer, request: dict, result: dict) -> Optional[int]:
+    def _append_result_page(self, layer, request: dict, result: dict) -> int | None:
         """Validates and appends one page, then advances its token."""
         try:
             new_items, new_place_ids = self._new_page_items(result)
@@ -699,7 +698,7 @@ class PlacesUi(QDialog):
         return added_count
 
     @staticmethod
-    def _show_page_added_message(added_count: Optional[int]) -> None:
+    def _show_page_added_message(added_count: int | None) -> None:
         """Reports a successfully appended page."""
         if added_count is not None:
             push_message(SUCCESS, f"Added {added_count} more place result(s).")
@@ -780,9 +779,9 @@ class PlacesUi(QDialog):
     def _fetch_detail_values(
         self,
         layer,
-        language: Optional[str],
-        political_view: Optional[str],
-        intended_use: Optional[str],
+        language: str | None,
+        political_view: str | None,
+        intended_use: str | None,
         targets: list[tuple[int, str]],
         credentials: tuple[str, str],
     ) -> dict:

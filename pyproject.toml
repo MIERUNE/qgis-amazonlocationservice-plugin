@@ -1,10 +1,10 @@
 [project]
 name = "qgis-amazonlocationservice-plugin"
-version = "4.5.0"
+version = "0.0.0"
 description = "QGIS Plugin for Amazon Location Service"
 readme = "README.md"
-# QGIS 3.34 LTR bundles Python 3.9.
-requires-python = ">=3.9"
+# QGIS 3.44 LTR bundles Python 3.12; Linux distributions ship 3.10 or later.
+requires-python = ">=3.10"
 authors = [
     { name = "MIERUNE Inc.", email = "info@mierune.co.jp" }
 ]
@@ -21,7 +21,7 @@ dev = [
 testpaths = ["location_service/tests"]
 
 [tool.ruff]
-target-version = "py39"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = [
