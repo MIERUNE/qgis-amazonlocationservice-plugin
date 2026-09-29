@@ -40,7 +40,9 @@ jobs:
 
       - name: Export locked test dependencies
         # The QGIS image has pip but no uv, so the container installs the
-        # pinned, hashed requirements exported from uv.lock.
+        # pinned, hashed requirements exported from uv.lock. They are
+        # installed with --ignore-installed because pip cannot uninstall the
+        # Debian-packaged copies (e.g. Pygments) that they replace.
         run: |
           uv export --locked --only-group test --no-emit-project \
             --output-file "$RUNNER_TEMP/requirements-test.txt"
@@ -58,7 +60,7 @@ jobs:
             -v "$RUNNER_TEMP/requirements-test.txt":/tmp/requirements-test.txt:ro \
             "$DOCKER_IMAGE":${{ matrix.docker_tags }} \
             sh -c "
-              pip3 install --break-system-packages -r /tmp/requirements-test.txt &&
+              pip3 install --break-system-packages --ignore-installed -r /tmp/requirements-test.txt &&
               xvfb-run -s '+extension GLX -screen 0 1024x768x24' \
                 python3 -m pytest -v
             "
